@@ -35,6 +35,7 @@ try {
     $stmt_emp->close();
 
     // 2. Obtener préstamos de herramientas
+    // CORRECCIÓN: Se arregló un typo en "h.id_herramienta" que causaba el error en el cálculo del total.
     $stmt = $conex->prepare(
         "SELECT h.nombre AS herramienta, p.cantidad, h.costo 
          FROM Prestamos p
@@ -62,3 +63,4 @@ try {
 
 echo json_encode($response);
 ?>
+

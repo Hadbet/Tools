@@ -97,8 +97,8 @@
             const toolNames = jsonData[1] || []; // Fila 2
             const toolCosts = jsonData[7] || []; // Fila 8
             const tools = [];
-            // Empezamos en la columna 4 que corresponde al índice 4 (Flexometro)
-            for (let i = 4; i < toolNames.length; i++) {
+            // CORRECCIÓN: Empezamos en la columna 5 (F) que corresponde al índice 5.
+            for (let i = 5; i < toolNames.length; i++) {
                 const name = toolNames[i] ? String(toolNames[i]).trim() : '';
                 const cost = toolCosts[i] ? parseFloat(String(toolCosts[i]).replace(',', '.')) : 0;
                 if (name && cost > 0) {
@@ -111,31 +111,36 @@
             // Los datos de empleados empiezan en la fila 9 (índice 8)
             for (let i = 8; i < jsonData.length; i++) {
                 const row = jsonData[i];
-                const nomina = row[0] ? parseInt(row[0], 10) : 0;
+                // CORRECCIÓN: Se leen los datos a partir de la columna B (índice 1).
+                const nomina = row[1] ? parseInt(row[1], 10) : 0;
 
                 if (nomina > 0) {
                     // Función para convertir fecha de Excel (número o texto) a YYYY-MM-DD
                     const formatDate = (excelDate) => {
-                        if (typeof excelDate === 'number') {
+                        if (typeof excelDate === 'number' && excelDate > 1) {
+                            // Es un número de serie de fecha de Excel
                             const date = new Date(Math.round((excelDate - 25569) * 864e5));
                             return date.toISOString().split('T')[0];
                         }
                         if (typeof excelDate === 'string') {
+                            // Es texto, intentamos analizarlo
                             const parts = excelDate.split('/');
                             if (parts.length === 3) {
                                 // Asumiendo formato DD/MM/YYYY o MM/DD/YYYY
+                                const day = parts[0].padStart(2, '0');
+                                const month = parts[1].padStart(2, '0');
                                 const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-                                return `${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                return `${year}-${month}-${day}`;
                             }
                         }
-                        return null;
+                        return null; // Devuelve null si no se puede formatear
                     };
 
                     const employee = {
                         nomina: nomina,
-                        nombre: row[1] ? String(row[1]).trim() : '',
-                        departamento: row[2] ? String(row[2]).trim() : '',
-                        fecha_ingreso: formatDate(row[3]),
+                        nombre: row[2] ? String(row[2]).trim() : '',
+                        departamento: row[3] ? String(row[3]).trim() : '',
+                        fecha_ingreso: formatDate(row[4]),
                         prestamos: []
                     };
 
@@ -188,3 +193,4 @@
 </script>
 </body>
 </html>
+
