@@ -86,24 +86,11 @@
                 throw new Error('El archivo Excel está vacío o tiene un formato inesperado.');
             }
 
-            // --- Lógica de extracción dinámica ---
-            let toolNameRowIndex = -1;
+            // --- Lógica de extracción dinámica MEJORADA ---
             let headerRowIndex = -1;
             let employeeStartColIndex = -1;
-            let toolStartColIndex = -1;
 
-            // Busca la fila que contiene el encabezado de las herramientas (ej. "Flexometro")
-            for (let i = 0; i < jsonData.length; i++) {
-                const row = jsonData[i] || [];
-                const flexometroIndex = row.findIndex(cell => cell && String(cell).trim().toLowerCase() === 'flexometro');
-                if (flexometroIndex !== -1) {
-                    toolNameRowIndex = i;
-                    toolStartColIndex = flexometroIndex;
-                    break;
-                }
-            }
-
-            // Busca la fila que contiene los encabezados principales (ej. "# Nomina")
+            // 1. Busca la fila que contiene los encabezados principales (ej. "# Nomina"). Esta es nuestro ancla.
             for (let i = 0; i < jsonData.length; i++) {
                 const row = jsonData[i] || [];
                 const nominaIndex = row.findIndex(cell => cell && String(cell).trim() === '# Nomina');
@@ -114,14 +101,32 @@
                 }
             }
 
-            // Valida que se hayan encontrado las filas y columnas clave
-            if (toolNameRowIndex === -1 || headerRowIndex === -1) {
-                throw new Error('No se pudieron encontrar las cabeceras esperadas ("# Nomina", "Flexometro") en el archivo. Verifique el formato.');
+            if (headerRowIndex === -1) {
+                throw new Error('No se pudo encontrar la cabecera "# Nomina" en el archivo. Verifique el formato.');
+            }
+
+            let toolNameRowIndex = -1;
+            let toolStartColIndex = -1;
+
+            // 2. Busca la fila de herramientas en las filas ANTERIORES a la de las cabeceras.
+            for (let i = headerRowIndex - 1; i >= 0; i--) {
+                const row = jsonData[i] || [];
+                // Buscamos una herramienta conocida para identificar la fila y la columna de inicio
+                const flexometroIndex = row.findIndex(cell => cell && String(cell).trim().toLowerCase() === 'flexometro');
+                if (flexometroIndex !== -1) {
+                    toolNameRowIndex = i;
+                    toolStartColIndex = flexometroIndex;
+                    break;
+                }
+            }
+
+            if (toolNameRowIndex === -1) {
+                throw new Error('No se pudo encontrar la fila de nombres de herramientas (ej. "Flexometro") encima de la cabecera "# Nomina".');
             }
 
             // --- 1. Extraer Herramientas y Costos ---
             const toolNames = jsonData[toolNameRowIndex] || [];
-            const toolCosts = jsonData[headerRowIndex] || [];
+            const toolCosts = jsonData[headerRowIndex] || []; // Los costos están en la misma fila que "# Nomina"
             const tools = [];
 
             for (let i = toolStartColIndex; i < toolNames.length; i++) {
