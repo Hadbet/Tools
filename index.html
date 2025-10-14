@@ -127,7 +127,10 @@
             return;
         }
 
-        let totalGeneral = 0; // Se reintroduce el cálculo del total
+        let totalGeneralCalculado = 0;
+        let totalDirectoDeExcel = null;
+        let tieneHerramientasReales = false;
+
         let tableHTML = `
             <div class="slide-up">
                 <h2 class="text-2xl font-bold text-center text-cyan-200 mb-4">Hola, ${data.empleado.nombre}</h2>
@@ -144,26 +147,45 @@
                         <tbody>`;
 
         data.prestamos.forEach(item => {
-            const subtotal = item.cantidad * item.costo;
-            totalGeneral += subtotal; // Se suma al total general
-            tableHTML += `
+            // Se busca la fila especial "Total" que se pudo haber colado desde la carga.
+            if (item.herramienta && item.herramienta.toLowerCase().trim() === 'total') {
+                totalDirectoDeExcel = parseFloat(item.cantidad); // La "cantidad" de esta fila es el valor total.
+            } else {
+                // Si es una herramienta normal, se procesa para la tabla.
+                tieneHerramientasReales = true;
+                const subtotal = item.cantidad * item.costo;
+                totalGeneralCalculado += subtotal;
+                tableHTML += `
                 <tr class="border-t border-gray-700">
                     <td class="px-6 py-4 font-medium">${item.herramienta}</td>
                     <td class="px-6 py-4 text-center">${item.cantidad}</td>
                     <td class="px-6 py-4 text-right">$${parseFloat(item.costo).toFixed(2)}</td>
                     <td class="px-6 py-4 text-right font-semibold text-cyan-300">$${subtotal.toFixed(2)}</td>
                 </tr>`;
+            }
         });
 
         tableHTML += `
                         </tbody>
                     </table>
-                </div>
+                </div>`;
 
-                <!-- CORRECCIÓN: Se añade un bloque separado para el total general -->
+        // Si no hay herramientas reales para mostrar (solo la fila "Total"), no mostramos la tabla.
+        if (!tieneHerramientasReales) {
+            const welcomeMessage = `¡Hola, ${data.empleado.nombre}!`;
+            const noLoansMessage = 'No tienes herramientas registradas a tu nombre. ¡Excelente!';
+            showFeedback(`${welcomeMessage}<br>${noLoansMessage}`, 'success');
+            return;
+        }
+
+        // Se decide qué total mostrar: el que viene directo de la fila "Total" tiene prioridad.
+        const totalFinal = totalDirectoDeExcel !== null ? totalDirectoDeExcel : totalGeneralCalculado;
+
+        tableHTML += `
+                <!-- Bloque separado para el total general -->
                 <div class="mt-6 p-4 bg-gray-900 bg-opacity-50 rounded-lg text-right">
                     <span class="text-lg uppercase font-semibold text-gray-300">Total a Cargo:</span>
-                    <span class="text-3xl font-bold text-cyan-200 ml-4">$${totalGeneral.toFixed(2)}</span>
+                    <span class="text-3xl font-bold text-cyan-200 ml-4">$${totalFinal.toFixed(2)}</span>
                 </div>
             </div>`;
 
@@ -183,5 +205,4 @@
 </script>
 </body>
 </html>
-
 
