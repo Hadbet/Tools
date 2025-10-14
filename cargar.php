@@ -100,6 +100,12 @@
             // CORRECCIÓN: Empezamos en la columna 5 (F) que corresponde al índice 5.
             for (let i = 5; i < toolNames.length; i++) {
                 const name = toolNames[i] ? String(toolNames[i]).trim() : '';
+
+                // CORRECCIÓN: Omitir las columnas que no son herramientas, como 'Total' o 'Folio T.C'.
+                if (name.toLowerCase().includes('total') || name.toLowerCase().includes('folio')) {
+                    continue; // Saltar a la siguiente iteración
+                }
+
                 const cost = toolCosts[i] ? parseFloat(String(toolCosts[i]).replace(',', '.')) : 0;
                 if (name && cost > 0) {
                     tools.push({ name: name, cost: cost, columnIndex: i });
@@ -193,4 +199,5 @@
 </script>
 </body>
 </html>
+
 

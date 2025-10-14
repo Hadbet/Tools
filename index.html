@@ -127,6 +127,7 @@
             return;
         }
 
+        let totalGeneral = 0; // Se reintroduce el cálculo del total
         let tableHTML = `
             <div class="slide-up">
                 <h2 class="text-2xl font-bold text-center text-cyan-200 mb-4">Hola, ${data.empleado.nombre}</h2>
@@ -144,6 +145,7 @@
 
         data.prestamos.forEach(item => {
             const subtotal = item.cantidad * item.costo;
+            totalGeneral += subtotal; // Se suma al total general
             tableHTML += `
                 <tr class="border-t border-gray-700">
                     <td class="px-6 py-4 font-medium">${item.herramienta}</td>
@@ -153,10 +155,15 @@
                 </tr>`;
         });
 
-        // CORRECCIÓN: Se eliminó el <tfoot> que mostraba el total general.
         tableHTML += `
                         </tbody>
                     </table>
+                </div>
+
+                <!-- CORRECCIÓN: Se añade un bloque separado para el total general -->
+                <div class="mt-6 p-4 bg-gray-900 bg-opacity-50 rounded-lg text-right">
+                    <span class="text-lg uppercase font-semibold text-gray-300">Total a Cargo:</span>
+                    <span class="text-3xl font-bold text-cyan-200 ml-4">$${totalGeneral.toFixed(2)}</span>
                 </div>
             </div>`;
 
@@ -176,4 +183,5 @@
 </script>
 </body>
 </html>
+
 
