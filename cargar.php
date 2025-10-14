@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cargar Datos - Toolcrib</title>
+    <title>Carga de Datos - Toolcrib</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Librería para leer archivos Excel -->
+    <!-- Librería para leer Excel en el navegador -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Librería para alertas bonitas -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -14,197 +14,180 @@
         body {
             font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #0a2a43 0%, #0e3e5f 100%);
-            color: #e0e0e0;
         }
-        .main-container {
-            background-color: rgba(14, 62, 95, 0.6);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .upload-container {
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+        }
+        .upload-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
         }
         .btn-upload {
             background-color: #1f7a8c;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(31, 122, 140, 0.4);
+            transition: background-color 0.3s, transform 0.2s;
         }
         .btn-upload:hover {
-            background-color: #2c9ab7;
+            background-color: #165a68;
             transform: scale(1.05);
-            box-shadow: 0 6px 20px rgba(44, 154, 183, 0.5);
+        }
+        .file-input-label {
+            border: 2px dashed #1f7a8c;
+            transition: border-color 0.3s, background-color 0.3s;
+        }
+        .file-input-label:hover {
+            background-color: rgba(31, 122, 140, 0.1);
+            border-color: #2c9ab7;
         }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="text-white min-h-screen flex items-center justify-center p-4">
 
-<div class="main-container rounded-2xl p-8 max-w-lg w-full shadow-2xl text-center">
-    <div class="mb-8">
-        <h1 class="text-5xl font-bold text-cyan-300 tracking-wider">Carga de Datos</h1>
-        <p class="text-gray-300 mt-2 text-lg">Control de Herramientas</p>
+<div class="upload-container bg-gray-800 bg-opacity-50 backdrop-blur-sm rounded-2xl p-8 max-w-lg w-full shadow-lg border border-gray-700">
+    <div class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-cyan-300">Control de Herramientas</h1>
+        <p class="text-gray-300 mt-2">Carga de Datos del Toolcrib</p>
     </div>
 
-    <p class="mb-6 text-gray-400">
-        Selecciona el archivo de Excel (.xlsx, .xls) para actualizar la base de datos de herramientas y préstamos.
-    </p>
+    <div>
+        <!-- Input de archivo oculto -->
+        <input id="fileInput" type="file" class="hidden" accept=".xlsx, .xls" />
 
-    <button id="uploadBtn" class="btn-upload text-white font-bold py-4 px-8 rounded-lg inline-flex items-center justify-center w-full">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-        </svg>
-        <span>Seleccionar Archivo Excel</span>
-    </button>
-
-    <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls">
+        <!-- Botón visible para el usuario -->
+        <button id="btnExcelUpload" class="w-full btn-upload text-white font-bold py-4 px-4 rounded-lg focus:outline-none focus:shadow-outline flex items-center justify-center gap-3 text-lg">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            Seleccionar Archivo Excel
+        </button>
+        <p id="file-name" class="text-center text-sm text-gray-400 mt-2"></p>
+    </div>
+    <div class="text-center mt-6">
+        <a href="consulta.html" class="text-cyan-400 hover:text-cyan-200 transition">Ir al Portal de Consulta &rarr;</a>
+    </div>
 </div>
 
 <script>
-    document.getElementById('uploadBtn').addEventListener('click', () => {
+    document.getElementById('btnExcelUpload').addEventListener('click', () => {
         document.getElementById('fileInput').click();
     });
 
     document.getElementById('fileInput').addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
-            processExcelFile(file);
+            document.getElementById('file-name').textContent = `Archivo: ${file.name}`;
+            procesarExcel(file);
         }
-        event.target.value = '';
     });
 
-    async function processExcelFile(file) {
+    async function procesarExcel(file) {
         try {
             Swal.fire({
                 title: 'Procesando archivo...',
-                text: 'Por favor, espera un momento.',
+                text: 'Por favor, espera mientras leemos los datos.',
                 allowOutsideClick: false,
-                didOpen: () => { Swal.showLoading(); }
+                didOpen: () => {
+                    Swal.showLoading();
+                }
             });
 
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-            // Asegurarse de leer la hoja correcta, en este caso la primera que se llama 'Usuarios'
-            const sheetName = workbook.SheetNames.find(name => name.toLowerCase().includes('usuarios'));
-            if (!sheetName) {
-                throw new Error("No se encontró una hoja llamada 'Usuarios' en el archivo Excel.");
-            }
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
-
-            if (!jsonData || jsonData.length < 3) {
-                throw new Error('La hoja de "Usuarios" está vacía o tiene un formato inesperado.');
-            }
-
-            // --- Lógica de extracción dinámica MEJORADA ---
-            let headerRowIndex = -1;
-            let employeeStartColIndex = -1;
-
-            // 1. Busca la fila que contiene los encabezados principales (ej. "# Nomina"). Esta es nuestro ancla.
-            for (let i = 0; i < jsonData.length; i++) {
-                const row = jsonData[i] || [];
-                const nominaIndex = row.findIndex(cell => cell && String(cell).trim() === '# Nomina');
-                if (nominaIndex !== -1) {
-                    headerRowIndex = i;
-                    employeeStartColIndex = nominaIndex;
-                    break;
-                }
-            }
-
-            if (headerRowIndex === -1) {
-                throw new Error('No se pudo encontrar la cabecera "# Nomina" en el archivo. Verifique el formato.');
-            }
-
-            let toolNameRowIndex = -1;
-            let toolStartColIndex = -1;
-
-            // 2. Busca la fila de herramientas en las filas ANTERIORES a la de las cabeceras.
-            for (let i = headerRowIndex - 1; i >= 0; i--) {
-                const row = jsonData[i] || [];
-                const flexometroIndex = row.findIndex(cell => cell && String(cell).trim().toLowerCase() === 'flexometro');
-                if (flexometroIndex !== -1) {
-                    toolNameRowIndex = i;
-                    toolStartColIndex = flexometroIndex;
-                    break;
-                }
-            }
-
-            if (toolNameRowIndex === -1) {
-                throw new Error('No se pudo encontrar la fila de nombres de herramientas (ej. "Flexometro") encima de la cabecera "# Nomina".');
-            }
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
             // --- 1. Extraer Herramientas y Costos ---
-            const toolNames = jsonData[toolNameRowIndex] || [];
-            const toolCosts = jsonData[headerRowIndex] || []; // Los costos están en la misma fila que "# Nomina"
+            const toolNames = jsonData[1] || []; // Fila 2
+            const toolCosts = jsonData[7] || []; // Fila 8
             const tools = [];
-
-            for (let i = toolStartColIndex; i < toolNames.length; i++) {
+            // CORRECCIÓN: Empezamos en la columna 5 (F) que corresponde al índice 5.
+            for (let i = 5; i < toolNames.length; i++) {
                 const name = toolNames[i] ? String(toolNames[i]).trim() : '';
-                if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('folio')) {
-                    continue;
-                }
                 const cost = toolCosts[i] ? parseFloat(String(toolCosts[i]).replace(',', '.')) : 0;
                 if (name && cost > 0) {
                     tools.push({ name: name, cost: cost, columnIndex: i });
                 }
             }
 
-            if (tools.length === 0) {
-                throw new Error('No se encontraron herramientas con costo válido. Verifique que los nombres de herramientas están en una fila y sus costos en la fila de "# Nomina".');
-            }
-
             // --- 2. Extraer Empleados y sus Préstamos ---
             const employeeData = [];
-            for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+            // Los datos de empleados empiezan en la fila 9 (índice 8)
+            for (let i = 8; i < jsonData.length; i++) {
                 const row = jsonData[i];
-                if (!row || row.length === 0) continue;
+                // CORRECCIÓN: Se leen los datos a partir de la columna B (índice 1).
+                const nomina = row[1] ? parseInt(row[1], 10) : 0;
 
-                const nomina = row[employeeStartColIndex] ? parseInt(row[employeeStartColIndex], 10) : 0;
                 if (nomina > 0) {
+                    // Función para convertir fecha de Excel (número o texto) a YYYY-MM-DD
                     const formatDate = (excelDate) => {
-                        if (!excelDate) return null;
-                        if (excelDate instanceof Date) return excelDate.toISOString().split('T')[0];
-                        return new Date(Math.round((excelDate - 25569) * 864e5)).toISOString().split('T')[0];
+                        if (typeof excelDate === 'number' && excelDate > 1) {
+                            // Es un número de serie de fecha de Excel
+                            const date = new Date(Math.round((excelDate - 25569) * 864e5));
+                            return date.toISOString().split('T')[0];
+                        }
+                        if (typeof excelDate === 'string') {
+                            // Es texto, intentamos analizarlo
+                            const parts = excelDate.split('/');
+                            if (parts.length === 3) {
+                                // Asumiendo formato DD/MM/YYYY o MM/DD/YYYY
+                                const day = parts[0].padStart(2, '0');
+                                const month = parts[1].padStart(2, '0');
+                                const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                                return `${year}-${month}-${day}`;
+                            }
+                        }
+                        return null; // Devuelve null si no se puede formatear
                     };
 
                     const employee = {
                         nomina: nomina,
-                        nombre: row[employeeStartColIndex + 1] ? String(row[employeeStartColIndex + 1]).trim() : '',
-                        departamento: row[employeeStartColIndex + 2] ? String(row[employeeStartColIndex + 2]).trim() : '',
-                        fecha_ingreso: formatDate(row[employeeStartColIndex + 3]),
+                        nombre: row[2] ? String(row[2]).trim() : '',
+                        departamento: row[3] ? String(row[3]).trim() : '',
+                        fecha_ingreso: formatDate(row[4]),
                         prestamos: []
                     };
 
                     tools.forEach(tool => {
                         const quantity = row[tool.columnIndex] ? parseInt(row[tool.columnIndex], 10) : 0;
                         if (quantity > 0) {
-                            employee.prestamos.push({ herramienta: tool.name, cantidad: quantity });
+                            employee.prestamos.push({
+                                toolName: tool.name,
+                                quantity: quantity
+                            });
                         }
                     });
                     employeeData.push(employee);
                 }
             }
 
-            if (employeeData.length === 0) {
-                throw new Error('No se encontraron empleados con un número de nómina válido en las filas de datos.');
-            }
-
-            // --- 3. Enviar datos al servidor ---
+            // --- 3. Enviar datos al Servidor ---
+            // Cambia la URL a la ruta correcta de tu API en el servidor.
             const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tools, employees: employeeData })
+                body: JSON.stringify({ tools: tools, employeeData: employeeData })
             });
 
-            if (!response.ok) {
-                throw new Error(`Error del servidor: ${response.status}`);
-            }
-
             const result = await response.json();
+
             if (result.success) {
-                Swal.fire({ icon: 'success', title: '¡Éxito!', text: result.message });
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Éxito!',
+                    text: result.message
+                });
             } else {
                 throw new Error(result.message);
             }
 
         } catch (error) {
-            console.error('Error al procesar el archivo:', error);
-            Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'Ocurrió un problema al procesar el archivo.' });
+            console.error("Error al procesar el Excel:", error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.message || 'Ocurrió un error al procesar el archivo. Revisa que el formato sea correcto.'
+            });
+        } finally {
+            // Resetea el input para poder subir el mismo archivo otra vez si es necesario.
+            document.getElementById('fileInput').value = '';
+            document.getElementById('file-name').textContent = '';
         }
     }
 </script>
