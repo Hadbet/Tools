@@ -5,9 +5,9 @@
 
 class ToolcribDB {
     private $host = "127.0.0.1:3306";
-    private $usuario = "u909553968_calidadUser"; // Recomiendo crear un usuario específico para esta app
+    private $usuario = "u909553968_Tool"; // Recomiendo crear un usuario específico para esta app
     private $clave = "Grammer2025";
-    private $db = "u909553968_Calidad"; // Deberías crear una base de datos nueva, por ejemplo: u909553968_Toolcrib
+    private $db = "u909553968_ToolC"; // Deberías crear una base de datos nueva, por ejemplo: u909553968_Toolcrib
     public $conexion;
 
     // Método para establecer y devolver la conexión a la base de datos.
