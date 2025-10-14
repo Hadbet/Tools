@@ -1,111 +1,3 @@
-<?php
-include_once('dao/db/db.php');
-
-$uploadMessage = '';
-$error = false;
-
-// Esta sección procesa el archivo cuando se envía el formulario.
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['dataFile'])) {
-    $fileName = $_FILES['dataFile']['tmp_name'];
-
-    if ($_FILES['dataFile']['size'] > 0) {
-        $file = fopen($fileName, "r");
-
-        $con = new ToolcribDB();
-        $conex = $con->conectar();
-        $conex->begin_transaction(); // Iniciamos una transacción para asegurar la integridad de los datos.
-
-        try {
-            // Leemos el archivo línea por línea (CSV).
-            $headerTools = fgetcsv($file); // Fila 1 (vacía)
-            $toolNames = fgetcsv($file);   // Fila 2 (Nombres de herramientas)
-            // Saltamos las 5 filas siguientes que no contienen datos relevantes para las herramientas.
-            for($i = 0; $i < 5; $i++) { fgetcsv($file); }
-            $toolCosts = fgetcsv($file);   // Fila 8 (Costos de herramientas)
-
-            // 1. Procesar herramientas y costos
-            $toolMap = []; // Para mapear el índice de la columna con el ID de la herramienta
-            for ($i = 4; $i < count($toolNames) - 2; $i++) { // Iteramos desde la columna de la primera herramienta
-                $name = trim($toolNames[$i]);
-                $cost = isset($toolCosts[$i]) ? floatval(trim($toolCosts[$i])) : 0;
-
-                if (!empty($name) && $cost > 0) {
-                    // Usamos INSERT ... ON DUPLICATE KEY UPDATE para insertar o actualizar la herramienta.
-                    $stmt = $conex->prepare("INSERT INTO Herramientas (nombre, costo) VALUES (?, ?) ON DUPLICATE KEY UPDATE costo = ?");
-                    $stmt->bind_param("sdd", $name, $cost, $cost);
-                    $stmt->execute();
-                    $id_herramienta = $conex->insert_id > 0 ? $conex->insert_id : null;
-
-                    // Si se actualizó, necesitamos obtener el ID
-                    if(!$id_herramienta) {
-                        $stmt_get_id = $conex->prepare("SELECT id_herramienta FROM Herramientas WHERE nombre = ?");
-                        $stmt_get_id->bind_param("s", $name);
-                        $stmt_get_id->execute();
-                        $result_id = $stmt_get_id->get_result();
-                        if($row_id = $result_id->fetch_assoc()) {
-                            $id_herramienta = $row_id['id_herramienta'];
-                        }
-                        $stmt_get_id->close();
-                    }
-                    $toolMap[$i] = $id_herramienta;
-                    $stmt->close();
-                }
-            }
-
-            // 2. Procesar empleados y préstamos
-            while (($column = fgetcsv($file)) !== FALSE) {
-                $id_nomina = intval(trim($column[0]));
-                $nombre = trim($column[1]);
-                $depto = trim($column[2]);
-                $fecha_ingreso_str = trim($column[3]);
-                $fecha_ingreso = date('Y-m-d', strtotime($fecha_ingreso_str));
-
-                if ($id_nomina > 0 && !empty($nombre)) {
-                    // Insertar o actualizar empleado
-                    $stmt = $conex->prepare("INSERT INTO Empleados (id_nomina, nombre, departamento, fecha_ingreso) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE nombre = ?, departamento = ?, fecha_ingreso = ?");
-                    $stmt->bind_param("issssss", $id_nomina, $nombre, $depto, $fecha_ingreso, $nombre, $depto, $fecha_ingreso);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    // Borramos préstamos anteriores para este empleado para no duplicar datos en cada carga.
-                    $stmt_delete = $conex->prepare("DELETE FROM Prestamos WHERE id_nomina = ?");
-                    $stmt_delete->bind_param("i", $id_nomina);
-                    $stmt_delete->execute();
-                    $stmt_delete->close();
-
-                    // Insertar nuevos préstamos
-                    foreach($toolMap as $colIndex => $id_herramienta) {
-                        $cantidad = isset($column[$colIndex]) ? intval(trim($column[$colIndex])) : 0;
-                        if($cantidad > 0) {
-                            $stmt = $conex->prepare("INSERT INTO Prestamos (id_nomina, id_herramienta, cantidad, fecha_prestamo) VALUES (?, ?, ?, CURDATE())");
-                            $stmt->bind_param("iii", $id_nomina, $id_herramienta, $cantidad);
-                            $stmt->execute();
-                            $stmt->close();
-                        }
-                    }
-                }
-            }
-
-            $conex->commit(); // Si todo fue bien, confirmamos los cambios.
-            $uploadMessage = '¡Base de datos actualizada correctamente!';
-            $error = false;
-        } catch (Exception $e) {
-            $conex->rollback(); // Si algo falla, revertimos todos los cambios.
-            $uploadMessage = 'Error al procesar el archivo: ' . $e->getMessage();
-            $error = true;
-        } finally {
-            if (isset($conex)) {
-                $conex->close();
-            }
-            fclose($file);
-        }
-    } else {
-        $uploadMessage = 'Por favor, selecciona un archivo CSV válido.';
-        $error = true;
-    }
-}
-?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -113,6 +5,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['dataFile'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Carga de Datos - Toolcrib</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería para leer Excel en el navegador -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Librería para alertas bonitas -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
         body {
@@ -152,39 +48,143 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['dataFile'])) {
         <p class="text-gray-300 mt-2">Carga de Datos del Toolcrib</p>
     </div>
 
-    <?php if (!empty($uploadMessage)): ?>
-        <div class="p-4 mb-4 text-sm rounded-lg <?php echo $error ? 'bg-red-800 text-red-200' : 'bg-green-800 text-green-200'; ?>" role="alert">
-            <span class="font-medium"><?php echo $uploadMessage; ?></span>
-        </div>
-    <?php endif; ?>
+    <div>
+        <!-- Input de archivo oculto -->
+        <input id="fileInput" type="file" class="hidden" accept=".xlsx, .xls" />
 
-    <form action="cargar.php" method="post" enctype="multipart/form-data" class="space-y-6">
-        <div>
-            <label class="block mb-2 text-sm font-medium text-gray-300" for="dataFile">Archivo de datos (.csv)</label>
-            <label for="dataFile" class="file-input-label flex flex-col items-center justify-center w-full h-48 rounded-lg cursor-pointer">
-                <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                    <svg class="w-10 h-10 mb-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                    <p class="mb-2 text-sm text-gray-400"><span class="font-semibold">Click para subir</span> o arrastra el archivo</p>
-                    <p class="text-xs text-gray-500">CSV (codificado en UTF-8)</p>
-                </div>
-                <input id="dataFile" name="dataFile" type="file" class="hidden" accept=".csv" />
-            </label>
-            <p id="file-name" class="text-center text-sm text-gray-400 mt-2"></p>
-        </div>
-        <p class="text-xs text-gray-400">
-            <strong>Importante:</strong> Guarda el archivo de Excel como <strong>CSV (delimitado por comas)</strong> antes de subirlo. El script está diseñado para leer la estructura específica de tu archivo.
-        </p>
-        <button type="submit" class="w-full btn-upload text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-            Actualizar Base de Datos
+        <!-- Botón visible para el usuario -->
+        <button id="btnExcelUpload" class="w-full btn-upload text-white font-bold py-4 px-4 rounded-lg focus:outline-none focus:shadow-outline flex items-center justify-center gap-3 text-lg">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            Seleccionar Archivo Excel
         </button>
-    </form>
+        <p id="file-name" class="text-center text-sm text-gray-400 mt-2"></p>
+    </div>
+    <div class="text-center mt-6">
+        <a href="consulta.html" class="text-cyan-400 hover:text-cyan-200 transition">Ir al Portal de Consulta &rarr;</a>
+    </div>
 </div>
 
 <script>
-    document.getElementById('dataFile').addEventListener('change', function() {
-        var fileName = this.files[0] ? this.files[0].name : 'Ningún archivo seleccionado';
-        document.getElementById('file-name').textContent = 'Archivo: ' + fileName;
+    document.getElementById('btnExcelUpload').addEventListener('click', () => {
+        document.getElementById('fileInput').click();
     });
+
+    document.getElementById('fileInput').addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            document.getElementById('file-name').textContent = `Archivo: ${file.name}`;
+            procesarExcel(file);
+        }
+    });
+
+    async function procesarExcel(file) {
+        try {
+            Swal.fire({
+                title: 'Procesando archivo...',
+                text: 'Por favor, espera mientras leemos los datos.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+            // --- 1. Extraer Herramientas y Costos ---
+            const toolNames = jsonData[1] || []; // Fila 2
+            const toolCosts = jsonData[7] || []; // Fila 8
+            const tools = [];
+            // Empezamos en la columna 4 que corresponde al índice 4 (Flexometro)
+            for (let i = 4; i < toolNames.length; i++) {
+                const name = toolNames[i] ? String(toolNames[i]).trim() : '';
+                const cost = toolCosts[i] ? parseFloat(String(toolCosts[i]).replace(',', '.')) : 0;
+                if (name && cost > 0) {
+                    tools.push({ name: name, cost: cost, columnIndex: i });
+                }
+            }
+
+            // --- 2. Extraer Empleados y sus Préstamos ---
+            const employeeData = [];
+            // Los datos de empleados empiezan en la fila 9 (índice 8)
+            for (let i = 8; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const nomina = row[0] ? parseInt(row[0], 10) : 0;
+
+                if (nomina > 0) {
+                    // Función para convertir fecha de Excel (número o texto) a YYYY-MM-DD
+                    const formatDate = (excelDate) => {
+                        if (typeof excelDate === 'number') {
+                            const date = new Date(Math.round((excelDate - 25569) * 864e5));
+                            return date.toISOString().split('T')[0];
+                        }
+                        if (typeof excelDate === 'string') {
+                            const parts = excelDate.split('/');
+                            if (parts.length === 3) {
+                                // Asumiendo formato DD/MM/YYYY o MM/DD/YYYY
+                                const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                                return `${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                            }
+                        }
+                        return null;
+                    };
+
+                    const employee = {
+                        nomina: nomina,
+                        nombre: row[1] ? String(row[1]).trim() : '',
+                        departamento: row[2] ? String(row[2]).trim() : '',
+                        fecha_ingreso: formatDate(row[3]),
+                        prestamos: []
+                    };
+
+                    tools.forEach(tool => {
+                        const quantity = row[tool.columnIndex] ? parseInt(row[tool.columnIndex], 10) : 0;
+                        if (quantity > 0) {
+                            employee.prestamos.push({
+                                toolName: tool.name,
+                                quantity: quantity
+                            });
+                        }
+                    });
+                    employeeData.push(employee);
+                }
+            }
+
+            // --- 3. Enviar datos al Servidor ---
+            // Cambia la URL a la ruta correcta de tu API en el servidor.
+            const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tools: tools, employeeData: employeeData })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Éxito!',
+                    text: result.message
+                });
+            } else {
+                throw new Error(result.message);
+            }
+
+        } catch (error) {
+            console.error("Error al procesar el Excel:", error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.message || 'Ocurrió un error al procesar el archivo. Revisa que el formato sea correcto.'
+            });
+        } finally {
+            // Resetea el input para poder subir el mismo archivo otra vez si es necesario.
+            document.getElementById('fileInput').value = '';
+            document.getElementById('file-name').textContent = '';
+        }
+    }
 </script>
 </body>
 </html>
