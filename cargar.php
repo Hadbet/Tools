@@ -79,11 +79,16 @@
 
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            // Asegurarse de leer la hoja correcta, en este caso la primera que se llama 'Usuarios'
+            const sheetName = workbook.SheetNames.find(name => name.toLowerCase().includes('usuarios'));
+            if (!sheetName) {
+                throw new Error("No se encontró una hoja llamada 'Usuarios' en el archivo Excel.");
+            }
+            const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
             if (!jsonData || jsonData.length < 3) {
-                throw new Error('El archivo Excel está vacío o tiene un formato inesperado.');
+                throw new Error('La hoja de "Usuarios" está vacía o tiene un formato inesperado.');
             }
 
             // --- Lógica de extracción dinámica MEJORADA ---
@@ -111,7 +116,6 @@
             // 2. Busca la fila de herramientas en las filas ANTERIORES a la de las cabeceras.
             for (let i = headerRowIndex - 1; i >= 0; i--) {
                 const row = jsonData[i] || [];
-                // Buscamos una herramienta conocida para identificar la fila y la columna de inicio
                 const flexometroIndex = row.findIndex(cell => cell && String(cell).trim().toLowerCase() === 'flexometro');
                 if (flexometroIndex !== -1) {
                     toolNameRowIndex = i;
@@ -140,12 +144,15 @@
                 }
             }
 
+            if (tools.length === 0) {
+                throw new Error('No se encontraron herramientas con costo válido. Verifique que los nombres de herramientas están en una fila y sus costos en la fila de "# Nomina".');
+            }
+
             // --- 2. Extraer Empleados y sus Préstamos ---
             const employeeData = [];
-            // Los datos de empleados empiezan en la fila siguiente a la de las cabeceras
             for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
                 const row = jsonData[i];
-                if (!row) continue;
+                if (!row || row.length === 0) continue;
 
                 const nomina = row[employeeStartColIndex] ? parseInt(row[employeeStartColIndex], 10) : 0;
                 if (nomina > 0) {
@@ -171,6 +178,10 @@
                     });
                     employeeData.push(employee);
                 }
+            }
+
+            if (employeeData.length === 0) {
+                throw new Error('No se encontraron empleados con un número de nómina válido en las filas de datos.');
             }
 
             // --- 3. Enviar datos al servidor ---
