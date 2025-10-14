@@ -65,7 +65,6 @@
         if (file) {
             processExcelFile(file);
         }
-        // Reset file input para permitir subir el mismo archivo de nuevo
         event.target.value = '';
     });
 
@@ -75,36 +74,61 @@
                 title: 'Procesando archivo...',
                 text: 'Por favor, espera un momento.',
                 allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
+                didOpen: () => { Swal.showLoading(); }
             });
 
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            // Usamos `defval: null` para que las celdas vacías se representen como null
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
-            if (!jsonData || jsonData.length < 9) {
-                throw new Error('El archivo Excel no tiene el formato o las filas esperadas.');
+            if (!jsonData || jsonData.length < 3) {
+                throw new Error('El archivo Excel está vacío o tiene un formato inesperado.');
             }
 
-            // --- Lógica de extracción de datos ---
+            // --- Lógica de extracción dinámica ---
+            let toolNameRowIndex = -1;
+            let headerRowIndex = -1;
+            let employeeStartColIndex = -1;
+            let toolStartColIndex = -1;
+
+            // Busca la fila que contiene el encabezado de las herramientas (ej. "Flexometro")
+            for (let i = 0; i < jsonData.length; i++) {
+                const row = jsonData[i] || [];
+                const flexometroIndex = row.findIndex(cell => cell && String(cell).trim().toLowerCase() === 'flexometro');
+                if (flexometroIndex !== -1) {
+                    toolNameRowIndex = i;
+                    toolStartColIndex = flexometroIndex;
+                    break;
+                }
+            }
+
+            // Busca la fila que contiene los encabezados principales (ej. "# Nomina")
+            for (let i = 0; i < jsonData.length; i++) {
+                const row = jsonData[i] || [];
+                const nominaIndex = row.findIndex(cell => cell && String(cell).trim() === '# Nomina');
+                if (nominaIndex !== -1) {
+                    headerRowIndex = i;
+                    employeeStartColIndex = nominaIndex;
+                    break;
+                }
+            }
+
+            // Valida que se hayan encontrado las filas y columnas clave
+            if (toolNameRowIndex === -1 || headerRowIndex === -1) {
+                throw new Error('No se pudieron encontrar las cabeceras esperadas ("# Nomina", "Flexometro") en el archivo. Verifique el formato.');
+            }
 
             // --- 1. Extraer Herramientas y Costos ---
-            const toolNames = jsonData[1] || []; // Fila 2
-            const toolCosts = jsonData[7] || []; // Fila 8
+            const toolNames = jsonData[toolNameRowIndex] || [];
+            const toolCosts = jsonData[headerRowIndex] || [];
             const tools = [];
-            // Empezamos en la columna 'F' que corresponde al índice 5.
-            for (let i = 5; i < toolNames.length; i++) {
+
+            for (let i = toolStartColIndex; i < toolNames.length; i++) {
                 const name = toolNames[i] ? String(toolNames[i]).trim() : '';
-
-                // CORRECCIÓN: Omitir las columnas que no son herramientas, como 'Total' o 'Folio T.C'.
                 if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('folio')) {
-                    continue; // Saltar a la siguiente iteración
+                    continue;
                 }
-
                 const cost = toolCosts[i] ? parseFloat(String(toolCosts[i]).replace(',', '.')) : 0;
                 if (name && cost > 0) {
                     tools.push({ name: name, cost: cost, columnIndex: i });
@@ -113,36 +137,31 @@
 
             // --- 2. Extraer Empleados y sus Préstamos ---
             const employeeData = [];
-            // Los datos de empleados empiezan en la fila 9 (índice 8)
-            for (let i = 8; i < jsonData.length; i++) {
+            // Los datos de empleados empiezan en la fila siguiente a la de las cabeceras
+            for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
                 const row = jsonData[i];
-                // Se leen los datos a partir de la columna B (índice 1).
-                const nomina = row[1] ? parseInt(row[1], 10) : 0;
+                if (!row) continue;
 
+                const nomina = row[employeeStartColIndex] ? parseInt(row[employeeStartColIndex], 10) : 0;
                 if (nomina > 0) {
                     const formatDate = (excelDate) => {
                         if (!excelDate) return null;
-                        if (excelDate instanceof Date) {
-                            return excelDate.toISOString().split('T')[0];
-                        }
+                        if (excelDate instanceof Date) return excelDate.toISOString().split('T')[0];
                         return new Date(Math.round((excelDate - 25569) * 864e5)).toISOString().split('T')[0];
                     };
 
                     const employee = {
                         nomina: nomina,
-                        nombre: row[2] ? String(row[2]).trim() : '',
-                        departamento: row[3] ? String(row[3]).trim() : '',
-                        fecha_ingreso: formatDate(row[4]),
+                        nombre: row[employeeStartColIndex + 1] ? String(row[employeeStartColIndex + 1]).trim() : '',
+                        departamento: row[employeeStartColIndex + 2] ? String(row[employeeStartColIndex + 2]).trim() : '',
+                        fecha_ingreso: formatDate(row[employeeStartColIndex + 3]),
                         prestamos: []
                     };
 
                     tools.forEach(tool => {
                         const quantity = row[tool.columnIndex] ? parseInt(row[tool.columnIndex], 10) : 0;
                         if (quantity > 0) {
-                            employee.prestamos.push({
-                                herramienta: tool.name,
-                                cantidad: quantity
-                            });
+                            employee.prestamos.push({ herramienta: tool.name, cantidad: quantity });
                         }
                     });
                     employeeData.push(employee);
@@ -152,36 +171,24 @@
             // --- 3. Enviar datos al servidor ---
             const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tools, employees: employeeData })
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Error del servidor: ${response.status} - ${errorText}`);
+                throw new Error(`Error del servidor: ${response.status}`);
             }
 
             const result = await response.json();
-
             if (result.success) {
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡Éxito!',
-                    text: result.message
-                });
+                Swal.fire({ icon: 'success', title: '¡Éxito!', text: result.message });
             } else {
                 throw new Error(result.message);
             }
 
         } catch (error) {
             console.error('Error al procesar el archivo:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: error.message || 'Ocurrió un problema al procesar el archivo.'
-            });
+            Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'Ocurrió un problema al procesar el archivo.' });
         }
     }
 </script>
