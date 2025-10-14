@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Carga de Datos - Toolcrib</title>
+    <title>Cargar Datos - Toolcrib</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Librería para leer Excel en el navegador -->
+    <!-- Librería para leer archivos Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Librería para alertas bonitas -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -14,74 +14,66 @@
         body {
             font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #0a2a43 0%, #0e3e5f 100%);
+            color: #e0e0e0;
         }
-        .upload-container {
-            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
-        }
-        .upload-container:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+        .main-container {
+            background-color: rgba(14, 62, 95, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         .btn-upload {
             background-color: #1f7a8c;
-            transition: background-color 0.3s, transform 0.2s;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(31, 122, 140, 0.4);
         }
         .btn-upload:hover {
-            background-color: #165a68;
+            background-color: #2c9ab7;
             transform: scale(1.05);
-        }
-        .file-input-label {
-            border: 2px dashed #1f7a8c;
-            transition: border-color 0.3s, background-color 0.3s;
-        }
-        .file-input-label:hover {
-            background-color: rgba(31, 122, 140, 0.1);
-            border-color: #2c9ab7;
+            box-shadow: 0 6px 20px rgba(44, 154, 183, 0.5);
         }
     </style>
 </head>
-<body class="text-white min-h-screen flex items-center justify-center p-4">
+<body class="min-h-screen flex items-center justify-center p-4">
 
-<div class="upload-container bg-gray-800 bg-opacity-50 backdrop-blur-sm rounded-2xl p-8 max-w-lg w-full shadow-lg border border-gray-700">
-    <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-cyan-300">Control de Herramientas</h1>
-        <p class="text-gray-300 mt-2">Carga de Datos del Toolcrib</p>
+<div class="main-container rounded-2xl p-8 max-w-lg w-full shadow-2xl text-center">
+    <div class="mb-8">
+        <h1 class="text-5xl font-bold text-cyan-300 tracking-wider">Carga de Datos</h1>
+        <p class="text-gray-300 mt-2 text-lg">Control de Herramientas</p>
     </div>
 
-    <div>
-        <!-- Input de archivo oculto -->
-        <input id="fileInput" type="file" class="hidden" accept=".xlsx, .xls" />
+    <p class="mb-6 text-gray-400">
+        Selecciona el archivo de Excel (.xlsx, .xls) para actualizar la base de datos de herramientas y préstamos.
+    </p>
 
-        <!-- Botón visible para el usuario -->
-        <button id="btnExcelUpload" class="w-full btn-upload text-white font-bold py-4 px-4 rounded-lg focus:outline-none focus:shadow-outline flex items-center justify-center gap-3 text-lg">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-            Seleccionar Archivo Excel
-        </button>
-        <p id="file-name" class="text-center text-sm text-gray-400 mt-2"></p>
-    </div>
-    <div class="text-center mt-6">
-        <a href="consulta.html" class="text-cyan-400 hover:text-cyan-200 transition">Ir al Portal de Consulta &rarr;</a>
-    </div>
+    <button id="uploadBtn" class="btn-upload text-white font-bold py-4 px-8 rounded-lg inline-flex items-center justify-center w-full">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+        <span>Seleccionar Archivo Excel</span>
+    </button>
+
+    <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls">
 </div>
 
 <script>
-    document.getElementById('btnExcelUpload').addEventListener('click', () => {
+    document.getElementById('uploadBtn').addEventListener('click', () => {
         document.getElementById('fileInput').click();
     });
 
     document.getElementById('fileInput').addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
-            document.getElementById('file-name').textContent = `Archivo: ${file.name}`;
-            procesarExcel(file);
+            processExcelFile(file);
         }
+        // Reset file input para permitir subir el mismo archivo de nuevo
+        event.target.value = '';
     });
 
-    async function procesarExcel(file) {
+    async function processExcelFile(file) {
         try {
             Swal.fire({
                 title: 'Procesando archivo...',
-                text: 'Por favor, espera mientras leemos los datos.',
+                text: 'Por favor, espera un momento.',
                 allowOutsideClick: false,
                 didOpen: () => {
                     Swal.showLoading();
@@ -89,20 +81,27 @@
             });
 
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, { type: 'array' });
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+            // Usamos `defval: null` para que las celdas vacías se representen como null
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+
+            if (!jsonData || jsonData.length < 9) {
+                throw new Error('El archivo Excel no tiene el formato o las filas esperadas.');
+            }
+
+            // --- Lógica de extracción de datos ---
 
             // --- 1. Extraer Herramientas y Costos ---
             const toolNames = jsonData[1] || []; // Fila 2
             const toolCosts = jsonData[7] || []; // Fila 8
             const tools = [];
-            // CORRECCIÓN: Empezamos en la columna 5 (F) que corresponde al índice 5.
+            // Empezamos en la columna 'F' que corresponde al índice 5.
             for (let i = 5; i < toolNames.length; i++) {
                 const name = toolNames[i] ? String(toolNames[i]).trim() : '';
 
                 // CORRECCIÓN: Omitir las columnas que no son herramientas, como 'Total' o 'Folio T.C'.
-                if (name.toLowerCase().includes('total') || name.toLowerCase().includes('folio')) {
+                if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('folio')) {
                     continue; // Saltar a la siguiente iteración
                 }
 
@@ -117,29 +116,16 @@
             // Los datos de empleados empiezan en la fila 9 (índice 8)
             for (let i = 8; i < jsonData.length; i++) {
                 const row = jsonData[i];
-                // CORRECCIÓN: Se leen los datos a partir de la columna B (índice 1).
+                // Se leen los datos a partir de la columna B (índice 1).
                 const nomina = row[1] ? parseInt(row[1], 10) : 0;
 
                 if (nomina > 0) {
-                    // Función para convertir fecha de Excel (número o texto) a YYYY-MM-DD
                     const formatDate = (excelDate) => {
-                        if (typeof excelDate === 'number' && excelDate > 1) {
-                            // Es un número de serie de fecha de Excel
-                            const date = new Date(Math.round((excelDate - 25569) * 864e5));
-                            return date.toISOString().split('T')[0];
+                        if (!excelDate) return null;
+                        if (excelDate instanceof Date) {
+                            return excelDate.toISOString().split('T')[0];
                         }
-                        if (typeof excelDate === 'string') {
-                            // Es texto, intentamos analizarlo
-                            const parts = excelDate.split('/');
-                            if (parts.length === 3) {
-                                // Asumiendo formato DD/MM/YYYY o MM/DD/YYYY
-                                const day = parts[0].padStart(2, '0');
-                                const month = parts[1].padStart(2, '0');
-                                const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-                                return `${year}-${month}-${day}`;
-                            }
-                        }
-                        return null; // Devuelve null si no se puede formatear
+                        return new Date(Math.round((excelDate - 25569) * 864e5)).toISOString().split('T')[0];
                     };
 
                     const employee = {
@@ -154,8 +140,8 @@
                         const quantity = row[tool.columnIndex] ? parseInt(row[tool.columnIndex], 10) : 0;
                         if (quantity > 0) {
                             employee.prestamos.push({
-                                toolName: tool.name,
-                                quantity: quantity
+                                herramienta: tool.name,
+                                cantidad: quantity
                             });
                         }
                     });
@@ -163,13 +149,19 @@
                 }
             }
 
-            // --- 3. Enviar datos al Servidor ---
-            // Cambia la URL a la ruta correcta de tu API en el servidor.
+            // --- 3. Enviar datos al servidor ---
             const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tools: tools, employeeData: employeeData })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ tools, employees: employeeData })
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Error del servidor: ${response.status} - ${errorText}`);
+            }
 
             const result = await response.json();
 
@@ -184,20 +176,15 @@
             }
 
         } catch (error) {
-            console.error("Error al procesar el Excel:", error);
+            console.error('Error al procesar el archivo:', error);
             Swal.fire({
                 icon: 'error',
                 title: 'Error',
-                text: error.message || 'Ocurrió un error al procesar el archivo. Revisa que el formato sea correcto.'
+                text: error.message || 'Ocurrió un problema al procesar el archivo.'
             });
-        } finally {
-            // Resetea el input para poder subir el mismo archivo otra vez si es necesario.
-            document.getElementById('fileInput').value = '';
-            document.getElementById('file-name').textContent = '';
         }
     }
 </script>
 </body>
 </html>
-
 
