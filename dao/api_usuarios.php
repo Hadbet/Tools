@@ -1,10 +1,11 @@
 <?php
 session_start();
+/*
 if (!isset($_SESSION['IdUsuario'])) {
     http_response_code(401); // Unauthorized
     echo json_encode(['error' => 'Acceso no autorizado.']);
     exit();
-}
+}*/
 
 header('Content-Type: application/json');
 require_once 'db/db.php';
