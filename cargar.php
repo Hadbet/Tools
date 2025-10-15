@@ -344,7 +344,7 @@
                 doc.text(splitTextAdeudo, 15, 75);
 
                 doc.autoTable({
-                    startY: 105,
+                    startY: 115,
                     head: [['Herramienta', 'Cantidad', 'Costo Unitario', 'Subtotal']],
                     body: body,
                     theme: 'grid'
