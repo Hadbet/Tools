@@ -385,12 +385,12 @@
 
             let finalY = 150;
             doc.text("___________________________________", 15, finalY);
-            doc.text(nombre.toUpperCase(), 15, finalY + 5);
-            doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA", 15, finalY + 10);
+            doc.text(nombre.toUpperCase(), 15, finalY + 10);
+            doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA", 15, finalY + 15);
 
             doc.text("___________________________________", 115, finalY);
-            doc.text(responsable.toUpperCase(), 115, finalY + 5);
-            doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 10);
+            doc.text(responsable.toUpperCase(), 115, finalY + 10);
+            doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 15);
 
             doc.save(`Carta_No_Adeudo_${nomina}.pdf`);
         }
