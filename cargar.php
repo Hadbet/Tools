@@ -376,12 +376,12 @@
         } else {
             // --- Contenido de la Carta de No Adeudo (con coordenadas ajustadas) ---
             doc.setFontSize(14).setFont(undefined, 'bold');
-            doc.text("Carta De No Adeudo De Material y Herramienta", 105, 60, { align: 'center' });
+            doc.text("Carta De No Adeudo De Material y Herramienta", 105, 70, { align: 'center' });
 
             doc.setFontSize(11).setFont(undefined, 'normal');
             let textNoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ________________ se firma de conformidad el presente documento.`;
             const splitTextNoAdeudo = doc.splitTextToSize(textNoAdeudo, 180);
-            doc.text(splitTextNoAdeudo, 15, 75);
+            doc.text(splitTextNoAdeudo, 15, 90);
 
             let finalY = 120;
             doc.text("___________________________________", 15, finalY);
