@@ -1,4 +1,4 @@
-
+<?php require_once 'dao/check_session.php'; ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -24,7 +24,6 @@
     <nav class="flex justify-center items-center gap-8 mb-8 border-b border-gray-700 pb-4">
         <a href="cargar.php" class="nav-link font-semibold text-lg py-2">Inicio</a>
         <a href="gestion_usuarios.php" class="nav-link active font-semibold text-lg py-2">Usuarios</a>
-        <a href="#" class="nav-link font-semibold text-lg py-2">Perfil</a>
         <a href="dao/logout.php" class="nav-link font-semibold text-lg py-2 text-red-400 hover:text-red-300">Cerrar Sesión</a>
     </nav>
 
