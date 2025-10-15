@@ -1,57 +1,56 @@
 <?php
 header('Content-Type: application/json');
-include_once('db/db.php');
+require_once 'db/db.php';
+
+if (!isset($_GET['nomina']) || empty($_GET['nomina'])) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Número de nómina no proporcionado.']);
+    exit;
+}
+
+$id_nomina = intval($_GET['nomina']);
+$response = [];
 
 try {
     $conector = new ToolcribDB();
     $conexion = $conector->conectar();
 
-    // --- ENFOQUE OPTIMIZADO DE DOS PASOS ---
+    // 1. Obtener datos básicos del empleado
+    $stmt_emp = $conexion->prepare("SELECT id_nomina, nombre FROM Empleados WHERE id_nomina = ?");
+    $stmt_emp->bind_param("i", $id_nomina);
+    $stmt_emp->execute();
+    $result_emp = $stmt_emp->get_result();
 
-    // PASO 1: Obtener una lista rápida de todos los IDs de los deudores.
-    // Esta consulta es muy ligera y rápida.
-    $stmtDeudores = $conexion->prepare("
-        SELECT DISTINCT p.id_nomina
+    if ($result_emp->num_rows === 0) {
+        throw new Exception('Empleado no encontrado con esa nómina.');
+    }
+    $empleado = $result_emp->fetch_assoc();
+    $response['nomina'] = $empleado['id_nomina'];
+    $response['nombre'] = $empleado['nombre'];
+    $stmt_emp->close();
+
+
+    // 2. Determinar si es deudor
+    $stmtDeudor = $conexion->prepare("
+        SELECT COUNT(p.id_prestamo) as total_prestamos
         FROM Prestamos p
         JOIN Herramientas h ON p.id_herramienta = h.id_herramienta
-        WHERE h.nombre <> 'Total' AND p.cantidad > 0
+        WHERE p.id_nomina = ? AND h.nombre <> 'Total' AND p.cantidad > 0
     ");
-    $stmtDeudores->execute();
-    $resultadoDeudores = $stmtDeudores->get_result();
+    $stmtDeudor->bind_param("i", $id_nomina);
+    $stmtDeudor->execute();
+    $resultDeudor = $stmtDeudor->get_result();
+    $deudas = $resultDeudor->fetch_assoc();
 
-    // Crear un array asociativo para una búsqueda ultra-rápida (O(1)).
-    $listaDeudores = [];
-    while ($fila = $resultadoDeudores->fetch_assoc()) {
-        $listaDeudores[$fila['id_nomina']] = true;
-    }
-    $stmtDeudores->close();
-
-    // PASO 2: Obtener la lista completa de empleados.
-    // Esta consulta también es muy simple y rápida.
-    $stmtEmpleados = $conexion->prepare("
-        SELECT id_nomina AS nomina, nombre
-        FROM Empleados
-        ORDER BY nombre ASC
-    ");
-    $stmtEmpleados->execute();
-    $resultadoEmpleados = $stmtEmpleados->get_result();
-
-    $empleados = [];
-    while ($fila = $resultadoEmpleados->fetch_assoc()) {
-        // Combinar los datos en PHP, lo cual es muy eficiente.
-        // Se verifica si la nómina existe en la lista de deudores.
-        $fila['estado'] = isset($listaDeudores[$fila['nomina']]) ? 'Deudor' : 'No Deudor';
-        $empleados[] = $fila;
-    }
-    $stmtEmpleados->close();
+    $response['estado'] = ($deudas['total_prestamos'] > 0) ? 'Deudor' : 'No Deudor';
+    $stmtDeudor->close();
 
     $conexion->close();
 
-    echo json_encode($empleados);
+    echo json_encode($response);
 
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Error en el servidor: ' . $e->getMessage()]);
 }
 ?>
-

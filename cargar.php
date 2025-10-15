@@ -39,9 +39,13 @@
             color: #67e8f9; /* cyan-300 */
             border-bottom-color: #67e8f9;
         }
+        .input-main {
+            background-color: rgba(10, 42, 67, 0.8);
+            border-color: #1f7a8c;
+        }
     </style>
 </head>
-<body class="min-h-screen p-4" onload="loadEmployeeReport()">
+<body class="min-h-screen p-4">
 
 <div class="main-container rounded-2xl p-8 max-w-7xl w-full mx-auto shadow-2xl">
     <!-- Barra de Navegación -->
@@ -53,40 +57,36 @@
 
     <!-- Sección de Carga de Archivos -->
     <div class="text-center p-6 bg-gray-900 bg-opacity-30 rounded-lg mb-10">
-        <h1 class="text-3xl font-bold text-cyan-300">Cargar Base de Datos de Herramientas</h1>
-        <p class="text-gray-400 mt-2">Selecciona el archivo Excel (.xlsx) para actualizar la información.</p>
-        <button id="uploadButton" class="btn-main text-white font-bold py-3 px-6 rounded-lg mt-4 inline-flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Seleccionar y Cargar Archivo
-        </button>
-        <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls">
-    </div>
-
-    <!-- Sección de Reporte General -->
-    <div>
-        <h2 class="text-3xl font-bold text-cyan-300 text-center mb-6">Reporte General de Empleados</h2>
-        <div class="overflow-x-auto rounded-lg border border-gray-700 bg-gray-900 bg-opacity-30">
-            <table class="min-w-full text-left text-sm">
-                <thead class="uppercase bg-gray-900 bg-opacity-50">
-                <tr>
-                    <th scope="col" class="px-6 py-3">Nómina</th>
-                    <th scope="col" class="px-6 py-3">Nombre</th>
-                    <th scope="col" class="px-6 py-3 text-center">Estado</th>
-                    <th scope="col" class="px-6 py-3 text-center">Acciones</th>
-                </tr>
-                </thead>
-                <tbody id="employee-table-body">
-                <!-- Las filas se insertarán aquí dinámicamente -->
-                </tbody>
-            </table>
+        <h1 class="text-3xl font-bold text-cyan-300">Cargar Base de Datos</h1>
+        <p class="text-gray-400 mt-2">Sube el archivo de Excel para actualizar el sistema.</p>
+        <div class="mt-6 flex justify-center">
+            <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls">
+            <button id="uploadButton" class="btn-main text-white font-bold py-3 px-6 rounded-lg flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                Seleccionar Archivo
+            </button>
         </div>
     </div>
+
+    <!-- Sección de Búsqueda y Reporte -->
+    <div class="mt-10">
+        <h2 class="text-3xl font-bold text-cyan-300 text-center">Reporte de Empleado</h2>
+        <p class="text-gray-400 mt-2 text-center">Busca un empleado por su número de nómina para generar su carta.</p>
+
+        <div class="flex justify-center items-center gap-4 my-6">
+            <input type="number" id="nominaInput" placeholder="Ingresa número de nómina" class="input-main text-white text-center text-lg w-full max-w-xs p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 transition">
+            <button id="searchButton" class="btn-main text-white font-bold py-3 px-8 rounded-lg">Buscar</button>
+        </div>
+
+        <div id="reportResult" class="mt-6">
+            <!-- El resultado de la búsqueda aparecerá aquí -->
+        </div>
+    </div>
+
 </div>
 
 <script>
-    // --- LÓGICA DE CARGA DE ARCHIVO EXCEL ---
+    // --- LÓGICA PARA CARGA DE EXCEL ---
     document.getElementById('uploadButton').addEventListener('click', () => {
         document.getElementById('fileInput').click();
     });
@@ -94,16 +94,14 @@
     document.getElementById('fileInput').addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
-            processAndSendData(file);
+            processExcelFile(file);
         }
-        // Resetea el input para permitir cargar el mismo archivo de nuevo
-        event.target.value = '';
     });
 
-    async function processAndSendData(file) {
+    async function processExcelFile(file) {
         Swal.fire({
-            title: 'Procesando archivo...',
-            text: 'Por favor, espera mientras leemos el Excel.',
+            title: 'Procesando archivo',
+            text: 'Por favor, espera...',
             allowOutsideClick: false,
             didOpen: () => {
                 Swal.showLoading();
@@ -112,113 +110,128 @@
 
         try {
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, { type: 'array' });
+            const workbook = XLSX.read(data);
 
-            // Busca la hoja que contiene los datos de los usuarios, usualmente llamada "Usuarios"
-            const sheetName = workbook.SheetNames.find(name => name.toLowerCase().includes('usuarios'));
-            if (!sheetName) {
-                throw new Error('No se encontró la hoja de cálculo "Usuarios" en el archivo Excel.');
+            // Busca la hoja que parece contener los datos principales
+            let targetSheet = null;
+            let sheetName = '';
+            for (const name of workbook.SheetNames) {
+                const sheet = workbook.Sheets[name];
+                const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                const hasNomina = json.some(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'));
+                if (hasNomina) {
+                    targetSheet = sheet;
+                    sheetName = name;
+                    break;
+                }
             }
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+            if (!targetSheet) {
+                throw new Error("No se pudo encontrar una hoja con la columna '# Nomina'. Revisa el formato del archivo.");
+            }
+
+            const jsonData = XLSX.utils.sheet_to_json(targetSheet, { header: 1 });
 
             let headerRowIndex = -1;
-            let toolRowIndex = -1;
-            let startDataRowIndex = -1;
-
-            // Búsqueda dinámica de las filas de encabezado
-            for (let i = 0; i < jsonData.length; i++) {
-                const row = jsonData[i].map(cell => String(cell).trim().toLowerCase());
-                if (row.includes('# nomina')) {
-                    headerRowIndex = i;
-                    startDataRowIndex = i + 1; // Los datos empiezan en la siguiente fila
-                }
-                if (row.includes('flexometro')) {
-                    toolRowIndex = i;
-                }
-                if (headerRowIndex !== -1 && toolRowIndex !== -1) break;
-            }
-
-            if (headerRowIndex === -1) throw new Error('No se encontró la fila de encabezado con "# Nomina".');
-            if (toolRowIndex === -1) throw new Error('No se encontró la fila de encabezado con "Flexometro".');
-
-            const toolHeaders = jsonData[toolRowIndex].map(cell => String(cell).trim());
-            const dataHeaders = jsonData[headerRowIndex].map(cell => String(cell).trim());
-
-            // Encuentra la columna inicial de las herramientas y de los datos de empleado
-            const toolStartIndex = toolHeaders.findIndex(h => h.toLowerCase() === 'flexometro');
-            const nominaIndex = dataHeaders.findIndex(h => h.toLowerCase() === '# nomina');
-            const nombreIndex = dataHeaders.findIndex(h => h.toLowerCase() === 'nombre');
-            const deptoIndex = dataHeaders.findIndex(h => h.toLowerCase() === 'departamento');
-            const fechaIndex = dataHeaders.findIndex(h => h.toLowerCase() === 'fecha ingreso');
-
-            if (toolStartIndex === -1 || nominaIndex === -1 || nombreIndex === -1) {
-                throw new Error('No se pudieron encontrar todas las columnas necesarias (Flexometro, # Nomina, Nombre).');
-            }
-
-            const herramientas = [];
-            const prestamos = [];
-
-            // Extraer las herramientas y sus costos
-            const costRow = jsonData[startDataRowIndex];
-            for (let i = toolStartIndex; i < toolHeaders.length; i++) {
-                const nombreHerramienta = toolHeaders[i];
-                const costoHerramienta = parseFloat(costRow[i]);
-                if (nombreHerramienta && !isNaN(costoHerramienta) && nombreHerramienta.toLowerCase() !== 'total' && nombreHerramienta.toLowerCase() !== 'folio t.c') {
-                    herramientas.push({
-                        nombre: nombreHerramienta,
-                        costo: costoHerramienta
-                    });
-                }
-            }
-
-            // Extraer los préstamos de cada empleado
-            for (let i = startDataRowIndex + 1; i < jsonData.length; i++) {
+            let headerRowData;
+            for(let i = 0; i < jsonData.length; i++) {
                 const row = jsonData[i];
+                const cell = row.find(c => typeof c === 'string' && c.trim().toLowerCase() === '# nomina');
+                if(cell){
+                    headerRowIndex = i;
+                    headerRowData = row.map(h => typeof h === 'string' ? h.trim() : h);
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                throw new Error("No se encontró la fila de encabezado con '# Nomina'.");
+            }
+
+            let costsRowIndex = -1;
+            for(let i = headerRowIndex; i >= 0; i--){
+                const row = jsonData[i];
+                if(row.some(cell => typeof cell === 'number')){
+                    costsRowIndex = i;
+                    break;
+                }
+            }
+
+            if (costsRowIndex === -1) {
+                throw new Error("No se encontró la fila de costos de herramientas por encima de los encabezados.");
+            }
+
+            const toolNamesRow = jsonData[costsRowIndex-1].map(h => typeof h === 'string' ? h.trim() : h);
+            const toolCostsRow = jsonData[costsRowIndex];
+
+            const tools = [];
+            for(let i = 0; i < toolNamesRow.length; i++){
+                const name = toolNamesRow[i];
+                const cost = toolCostsRow[i];
+                if(name && typeof cost === 'number'){
+                    tools.push({ name: name, cost: cost });
+                }
+            }
+
+            if (tools.length === 0) {
+                throw new Error("No se encontraron herramientas con costos válidos en el archivo.");
+            }
+
+            const nominaIndex = headerRowData.indexOf('# Nomina');
+            const nombreIndex = headerRowData.indexOf('Nombre');
+            const deptoIndex = headerRowData.indexOf('Departamento');
+            const fechaIndex = headerRowData.indexOf('Fecha Ingreso');
+
+            const employeeData = jsonData.slice(headerRowIndex + 1).map(row => {
                 const nomina = row[nominaIndex];
-                if (!nomina) continue;
+                if (!nomina || isNaN(parseInt(nomina))) return null;
 
-                const empleado = {
-                    nomina: String(nomina).trim(),
-                    nombre: String(row[nombreIndex]).trim(),
-                    departamento: String(row[deptoIndex]).trim(),
-                    fechaIngreso: String(row[fechaIndex]).trim()
+                const fechaIngresoRaw = row[fechaIndex];
+                let fechaIngresoFormatted = null;
+                if (fechaIngresoRaw) {
+                    if (typeof fechaIngresoRaw === 'number') { // Formato de fecha de Excel (número de serie)
+                        const date = XLSX.SSF.parse_date_code(fechaIngresoRaw);
+                        fechaIngresoFormatted = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+                    } else if (typeof fechaIngresoRaw === 'string') { // Formato de fecha como texto (MM/DD/YYYY)
+                        const parts = fechaIngresoRaw.split('/');
+                        if (parts.length === 3) {
+                            fechaIngresoFormatted = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+                        }
+                    }
+                }
+
+                const prestamos = [];
+                for(let i = fechaIndex + 1; i < headerRowData.length; i++) {
+                    const toolName = headerRowData[i];
+                    const quantity = row[i];
+                    if(toolName && quantity && typeof quantity === 'number' && quantity > 0) {
+                        prestamos.push({
+                            herramienta: toolName,
+                            cantidad: quantity
+                        });
+                    }
+                }
+
+                return {
+                    nomina: nomina,
+                    nombre: row[nombreIndex] || 'N/A',
+                    departamento: row[deptoIndex] || 'N/A',
+                    fecha_ingreso: fechaIngresoFormatted,
+                    prestamos: prestamos
                 };
+            }).filter(Boolean);
 
-                for (let j = 0; j < herramientas.length; j++) {
-                    const toolColumnIndex = toolStartIndex + j;
-                    const cantidad = parseFloat(row[toolColumnIndex]);
-                    if (!isNaN(cantidad) && cantidad > 0) {
-                        prestamos.push({
-                            empleado: empleado,
-                            herramienta: herramientas[j],
-                            cantidad: cantidad
-                        });
-                    }
-                }
-                // Capturar la columna "Total" si existe para el empleado
-                const totalHeaderIndex = toolHeaders.findIndex(h => h.toLowerCase() === 'total');
-                if (totalHeaderIndex !== -1) {
-                    const totalValue = parseFloat(row[totalHeaderIndex]);
-                    if (!isNaN(totalValue) && totalValue > 0) {
-                        prestamos.push({
-                            empleado: empleado,
-                            herramienta: { nombre: 'Total', costo: 0 },
-                            cantidad: totalValue
-                        });
-                    }
-                }
-            }
-            if (prestamos.length === 0 && herramientas.length === 0) {
-                throw new Error("No se encontraron datos de herramientas o préstamos para procesar en el archivo.");
-            }
+            const payload = {
+                herramientas: tools,
+                empleados: employeeData
+            };
 
-            // Enviar datos al servidor
-            const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
+            const response = await fetch('api_cargar.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ herramientas, prestamos })
+                body: JSON.stringify(payload)
             });
+
             const result = await response.json();
 
             if (result.success) {
@@ -227,172 +240,182 @@
                     title: '¡Éxito!',
                     text: result.message
                 });
-                loadEmployeeReport(); // Recargar la tabla
             } else {
-                throw new Error(result.message);
+                throw new Error(result.message || 'Ocurrió un error en el servidor.');
             }
 
         } catch (error) {
             Swal.fire({
                 icon: 'error',
                 title: 'Error al procesar',
-                text: error.message || 'Ocurrió un error inesperado.'
+                text: error.message
             });
+            console.error(error);
         }
     }
 
-    // --- LÓGICA DE REPORTE GENERAL Y GENERACIÓN DE PDF ---
-    async function loadEmployeeReport() {
-        const tableBody = document.getElementById('employee-table-body');
-        tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-6">Cargando reporte...</td></tr>';
 
-        try {
-            const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_get_all_employees.php');
-            const employees = await response.json();
+    // --- LÓGICA PARA BÚSQUEDA Y REPORTE ---
+    const searchButton = document.getElementById('searchButton');
+    const nominaInput = document.getElementById('nominaInput');
+    const reportResultDiv = document.getElementById('reportResult');
 
-            if (employees.error) {
-                throw new Error(employees.error);
-            }
-
-            tableBody.innerHTML = '';
-            if (employees.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-6">No hay empleados en la base de datos.</td></tr>';
-                return;
-            }
-
-            employees.forEach(emp => {
-                const isDeudor = emp.estado === 'Deudor';
-                const statusClass = isDeudor ? 'bg-red-500 text-red-100' : 'bg-green-500 text-green-100';
-                const buttonText = isDeudor ? 'Descargar Carta de Adeudo' : 'Descargar Carta de No Adeudo';
-
-                const row = `
-                    <tr class="border-b border-gray-700 hover:bg-gray-800">
-                        <td class="px-6 py-4">${emp.nomina}</td>
-                        <td class="px-6 py-4 font-medium">${emp.nombre}</td>
-                        <td class="px-6 py-4 text-center">
-                            <span class="px-3 py-1 text-xs font-semibold rounded-full ${statusClass}">
-                                ${emp.estado}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-center">
-                            <button onclick="generatePdf('${emp.nomina}', ${isDeudor})" class="btn-main text-white text-xs font-bold py-2 px-3 rounded">
-                                ${buttonText}
-                            </button>
-                        </td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-        } catch (error) {
-            tableBody.innerHTML = `<tr><td colspan="4" class="text-center p-6 text-red-400">Error al cargar el reporte: ${error.message}</td></tr>`;
+    const searchEmployee = async () => {
+        const nomina = nominaInput.value;
+        if (!nomina) {
+            Swal.fire('Atención', 'Por favor, ingresa un número de nómina.', 'warning');
+            return;
         }
-    }
 
-    async function generatePdf(nomina, isDeudor) {
-        Swal.fire({
-            title: 'Generando PDF...',
-            text: 'Por favor, espera.',
-            allowOutsideClick: false,
-            didOpen: () => { Swal.showLoading(); }
-        });
+        reportResultDiv.innerHTML = `<p class="text-center">Buscando...</p>`;
 
         try {
-            // Obtener los datos más frescos del empleado
-            const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
+            const response = await fetch(`api_get_single_employee.php?nomina=${nomina}`);
+            if (!response.ok) {
+                throw new Error('Error en la respuesta del servidor.');
+            }
             const data = await response.json();
 
-            if (data.error) throw new Error(data.error);
+            if (data.error) {
+                throw new Error(data.error);
+            }
 
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
+            displayEmployeeResult(data);
 
-            const nombreEmpleado = data.empleado.nombre;
-            const nominaEmpleado = data.empleado.nomina;
-            const responsable = "JAIR"; // Variable para el responsable
+        } catch (error) {
+            reportResultDiv.innerHTML = '';
+            Swal.fire('Error', error.message, 'error');
+        }
+    };
 
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
+    searchButton.addEventListener('click', searchEmployee);
+    nominaInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') searchEmployee();
+    });
 
-            if (isDeudor) {
-                // --- CARTA DE ADEUDO ---
-                doc.text("Carta De Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
-                doc.setFontSize(11);
-                doc.setFont("helvetica", "normal");
+    function displayEmployeeResult(employee) {
+        const estadoClass = employee.estado === 'Deudor' ? 'text-red-400 bg-red-900 bg-opacity-50' : 'text-green-400 bg-green-900 bg-opacity-50';
+        const buttonText = employee.estado === 'Deudor' ? 'Descargar Carta de Adeudo' : 'Descargar Carta de No Adeudo';
 
-                const textoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombreEmpleado} con numero de nómina ${nominaEmpleado} ha quedado a deber material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades; por lo cual me permito expedir el siguiente formato que hace constar el adeudo de material de la persona antes mencionada adjuntando los formatos que hacen constar la entrega de dicho material firmado por las tres partes involucradas en la asignación de este.\n\nTeniendo en cuenta que el material adeudado se descontará por vía nómina, se describen las cantidades y la descripción del material para los fines requeridos en el área de Recursos Humanos:`;
-                doc.text(textoAdeudo, 20, 35, { maxWidth: 170 });
+        reportResultDiv.innerHTML = `
+            <div class="overflow-x-auto rounded-lg border border-gray-700">
+                <table class="min-w-full text-left text-sm">
+                    <thead class="bg-gray-800 uppercase">
+                        <tr>
+                            <th scope="col" class="px-6 py-3">Nómina</th>
+                            <th scope="col" class="px-6 py-3">Nombre</th>
+                            <th scope="col" class="px-6 py-3 text-center">Estado</th>
+                            <th scope="col" class="px-6 py-3 text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-t border-gray-700">
+                            <td class="px-6 py-4 font-medium">${employee.nomina}</td>
+                            <td class="px-6 py-4">${employee.nombre}</td>
+                            <td class="px-6 py-4 text-center">
+                                <span class="px-3 py-1 rounded-full font-semibold ${estadoClass}">${employee.estado}</span>
+                            </td>
+                            <td class="px-6 py-4 text-center">
+                                <button onclick="generatePdf('${employee.nomina}', '${employee.nombre}', '${employee.estado}')" class="btn-main text-white text-xs font-bold py-2 px-3 rounded">
+                                    ${buttonText}
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
 
-                const tableBody = [];
-                let totalAdeudo = 0;
-                let totalDirecto = null;
+    // --- LÓGICA PARA GENERAR PDF ---
+    async function generatePdf(nomina, nombre, estado) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
 
-                data.prestamos.forEach(p => {
-                    if (p.herramienta.toLowerCase() === 'total') {
-                        totalDirecto = parseFloat(p.cantidad);
+        const responsable = "JAIR"; // Variable para el responsable
+        const hoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+
+        if (estado === 'Deudor') {
+            try {
+                const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
+                const data = await response.json();
+                if (data.error || !data.prestamos) throw new Error('No se pudo obtener el detalle del adeudo.');
+
+                let totalAmount = 0;
+                const body = [];
+                let totalRow = null;
+
+                data.prestamos.forEach(item => {
+                    if (item.herramienta.toLowerCase() === 'total') {
+                        totalRow = item;
                     } else {
-                        const subtotal = p.cantidad * p.costo;
-                        tableBody.push([p.herramienta, p.cantidad, `$${parseFloat(p.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
-                        totalAdeudo += subtotal;
+                        const subtotal = item.cantidad * item.costo;
+                        body.push([item.herramienta, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
                     }
                 });
 
-                if (totalDirecto !== null) {
-                    totalAdeudo = totalDirecto;
+                if (totalRow) {
+                    totalAmount = parseFloat(totalRow.cantidad);
                 }
 
-                if (tableBody.length > 0) {
-                    doc.autoTable({
-                        startY: 80,
-                        head: [['Herramienta', 'Cantidad', 'Costo Unitario', 'Subtotal']],
-                        body: tableBody,
-                        theme: 'grid'
-                    });
-                }
+                // --- Contenido de la Carta de Adeudo ---
+                doc.setFontSize(14).setFont(undefined, 'bold');
+                doc.text("Carta De Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
 
-                const finalY = doc.autoTable.previous.finalY || 80;
-                doc.setFontSize(12);
-                doc.setFont("helvetica", "bold");
-                doc.text(`Total a descontar: $${totalAdeudo.toFixed(2)} MXN`, 20, finalY + 15);
+                doc.setFontSize(11).setFont(undefined, 'normal');
+                let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con numero de nómina ${nomina} ha quedado a deber material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades; por lo cual me permito expedir el siguiente formato que hace constar el adeudo de material de la persona antes mencionada.\n\nTeniendo en cuenta que el material adeudado se descontará por vía nómina, se describen las cantidades y la descripción del material para los fines requeridos en el área de Recursos Humanos:`;
+                const splitText = doc.splitTextToSize(text, 180);
+                doc.text(splitText, 15, 35);
 
-                doc.setFontSize(11);
-                doc.setFont("helvetica", "normal");
-                doc.text("A continuación, con fecha de _______________ se firma de conformidad el presente documento.", 20, finalY + 30);
+                doc.autoTable({
+                    startY: doc.previousAutoTable ? doc.previousAutoTable.finalY + 10 : 75,
+                    head: [['Herramienta', 'Cantidad', 'Costo Unitario', 'Subtotal']],
+                    body: body,
+                    theme: 'grid'
+                });
 
-                doc.text("___________________________________", 20, finalY + 55);
-                doc.text(nombreEmpleado, 20, finalY + 60);
-                doc.text("NOMBRE Y FIRMA DE QUIEN ADEUDA", 20, finalY + 65);
+                let finalY = doc.autoTable.previous.finalY;
+                doc.setFontSize(12).setFont(undefined, 'bold');
+                doc.text(`Total a Descontar: $${totalAmount.toFixed(2)} MXN`, 15, finalY + 15);
 
-                doc.text("___________________________________", 110, finalY + 55);
-                doc.text(responsable, 110, finalY + 60);
-                doc.text("TOOLCRIB - RESPONSABLE", 110, finalY + 65);
+                finalY += 30;
+                doc.setFontSize(11).setFont(undefined, 'normal');
+                doc.text(`A continuación, con fecha de ${hoy} se firma de conformidad.`, 15, finalY);
 
-            } else {
-                // --- CARTA DE NO ADEUDO ---
-                doc.text("Carta De No Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
-                doc.setFontSize(11);
-                doc.setFont("helvetica", "normal");
+                finalY += 30;
+                doc.text("___________________________________", 15, finalY);
+                doc.text(nombre.toUpperCase(), 15, finalY + 5);
+                doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA MATERIAL", 15, finalY + 10);
 
-                const textoNoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombreEmpleado} con número de nómina ${nominaEmpleado} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de _______________ se firma de conformidad el presente documento por parte de las personas involucradas en la liberación de este.`;
-                doc.text(textoNoAdeudo, 20, 35, { maxWidth: 170 });
+                doc.text("___________________________________", 115, finalY);
+                doc.text(responsable.toUpperCase(), 115, finalY + 5);
+                doc.text("TOOLCRIB - RESPONSABLE", 115, finalY + 10);
 
-                doc.text("___________________________________", 20, 100);
-                doc.text(nombreEmpleado, 20, 105);
-                doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA", 20, 110);
+                doc.save(`Carta_Adeudo_${nomina}.pdf`);
 
-                doc.text("___________________________________", 110, 100);
-                doc.text(responsable, 110, 105);
-                doc.text("TOOLCRIB - RESPONSABLE", 110, 110);
+            } catch (error) {
+                Swal.fire('Error', error.message, 'error');
             }
+        } else {
+            // --- Contenido de la Carta de No Adeudo ---
+            doc.setFontSize(14).setFont(undefined, 'bold');
+            doc.text("Carta De No Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
 
-            Swal.close();
-            doc.save(`Carta_${isDeudor ? 'Adeudo' : 'NoAdeudo'}_${nomina}.pdf`);
+            doc.setFontSize(11).setFont(undefined, 'normal');
+            let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`;
+            const splitText = doc.splitTextToSize(text, 180);
+            doc.text(splitText, 15, 40);
 
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error al generar PDF',
-                text: error.message
-            });
+            let finalY = 100;
+            doc.text("___________________________________", 15, finalY);
+            doc.text(nombre.toUpperCase(), 15, finalY + 5);
+            doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA MATERIAL", 15, finalY + 10);
+
+            doc.text("___________________________________", 115, finalY);
+            doc.text(responsable.toUpperCase(), 115, finalY + 5);
+            doc.text("TOOLCRIB - RESPONSABLE", 115, finalY + 10);
+
+            doc.save(`Carta_No_Adeudo_${nomina}.pdf`);
         }
     }
 </script>
