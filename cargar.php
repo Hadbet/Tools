@@ -389,7 +389,7 @@
 
             doc.text("___________________________________", 115, finalY);
             doc.text(responsable.toUpperCase(), 115, finalY + 5);
-            doc.text("TOOLCRIB - RESPONSABLE", 115, finalY + 10);
+            doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 10);
 
             doc.save(`Carta_No_Adeudo_${nomina}.pdf`);
         }
