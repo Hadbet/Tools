@@ -51,7 +51,7 @@
     <!-- Barra de Navegación -->
     <nav class="flex justify-center items-center gap-8 mb-8 border-b border-gray-700 pb-4">
         <a href="#" class="nav-link active font-semibold text-lg py-2">Inicio</a>
-        <a href="#" class="nav-link font-semibold text-lg py-2">Usuarios</a>
+        <a href="gestion_usuarios.php" class="nav-link font-semibold text-lg py-2">Usuarios</a>
         <a href="#" class="nav-link font-semibold text-lg py-2">Perfil</a>
     </nav>
 

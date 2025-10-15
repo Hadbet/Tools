@@ -1,4 +1,4 @@
-<?php require_once 'check_session.php'; ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
