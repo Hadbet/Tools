@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/json');
 // CORRECCIÓN 1: Se ajusta la ruta para que coincida con tu estructura de carpetas.
-require_once 'db/db.php';
+include_once('db/db.php');
 
 try {
     $conector = new LocalConector();
