@@ -1,10 +1,11 @@
 <?php
 header('Content-Type: application/json');
-// CORRECCIÓN 1: Se ajusta la ruta para que coincida con tu estructura de carpetas.
+// Se ajusta la ruta para que coincida con tu estructura de carpetas.
 include_once('db/db.php');
 
 try {
-    $conector = new LocalConector();
+    // CORRECCIÓN: Se usa el nombre de la clase correcto para la conexión.
+    $conector = new ToolcribDB();
     $conexion = $conector->conectar();
 
     // Consulta para obtener todos los empleados de la tabla Empleados
@@ -46,9 +47,10 @@ try {
     echo json_encode(array_values($empleados));
 
 } catch (Exception $e) {
-    // CORRECCIÓN 2: Se envía una respuesta JSON detallada en caso de error.
+    // Se envía una respuesta JSON detallada en caso de error.
     http_response_code(500);
     // Esto te dirá exactamente qué está fallando (ej: "Conexión rechazada", "Tabla no encontrada", etc.)
     echo json_encode(['error' => 'Error en el servidor: ' . $e->getMessage()]);
 }
 ?>
+
