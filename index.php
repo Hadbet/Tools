@@ -33,7 +33,7 @@
         <div>
             <img class="mx-auto h-16 w-auto" src="images/logo.png" alt="Logo">
             <h2 class="mt-6 text-center text-3xl font-extrabold text-white">
-                Control de Herramientas
+                Control de Herramientas TOOLCRIB
             </h2>
         </div>
         <form id="loginForm" class="mt-8 space-y-6">
