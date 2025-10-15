@@ -1,5 +1,6 @@
 <?php
 header('Content-Type: application/json');
+// CORRECCIÓN 1: Se ajusta la ruta para que coincida con tu estructura de carpetas.
 require_once 'db/db.php';
 
 try {
@@ -24,7 +25,6 @@ try {
     $stmt->close();
 
     // Consulta para verificar quiénes tienen préstamos (son deudores)
-    // Se excluyen las herramientas llamadas 'Total' para determinar el estado
     $stmtDeudores = $conexion->prepare(
         "SELECT DISTINCT p.id_nomina 
          FROM Prestamos p
@@ -43,12 +43,12 @@ try {
 
     $conexion->close();
 
-    // Convertir el array asociativo a un array indexado para el JSON
     echo json_encode(array_values($empleados));
 
 } catch (Exception $e) {
+    // CORRECCIÓN 2: Se envía una respuesta JSON detallada en caso de error.
     http_response_code(500);
+    // Esto te dirá exactamente qué está fallando (ej: "Conexión rechazada", "Tabla no encontrada", etc.)
     echo json_encode(['error' => 'Error en el servidor: ' . $e->getMessage()]);
 }
 ?>
-
