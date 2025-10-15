@@ -112,54 +112,35 @@
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data);
 
-            // Busca la hoja que parece contener los datos principales
             let targetSheet = null;
-            let sheetName = '';
             for (const name of workbook.SheetNames) {
                 const sheet = workbook.Sheets[name];
                 const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                const hasNomina = json.some(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'));
-                if (hasNomina) {
+                if (json.some(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'))) {
                     targetSheet = sheet;
-                    sheetName = name;
                     break;
                 }
             }
 
             if (!targetSheet) {
-                throw new Error("No se pudo encontrar una hoja con la columna '# Nomina'. Revisa el formato del archivo.");
+                throw new Error("No se pudo encontrar una hoja con la columna '# Nomina'. Revisa el formato.");
             }
 
             const jsonData = XLSX.utils.sheet_to_json(targetSheet, { header: 1 });
 
-            let headerRowIndex = -1;
-            let headerRowData;
-            for(let i = 0; i < jsonData.length; i++) {
-                const row = jsonData[i];
-                const cell = row.find(c => typeof c === 'string' && c.trim().toLowerCase() === '# nomina');
-                if(cell){
-                    headerRowIndex = i;
-                    headerRowData = row.map(h => typeof h === 'string' ? h.trim() : h);
-                    break;
-                }
-            }
+            let headerRowIndex = jsonData.findIndex(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'));
+            if (headerRowIndex === -1) throw new Error("No se encontró la fila de encabezado con '# Nomina'.");
 
-            if (headerRowIndex === -1) {
-                throw new Error("No se encontró la fila de encabezado con '# Nomina'.");
-            }
+            let headerRowData = jsonData[headerRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
 
             let costsRowIndex = -1;
             for(let i = headerRowIndex; i >= 0; i--){
-                const row = jsonData[i];
-                if(row.some(cell => typeof cell === 'number')){
+                if(jsonData[i].some(cell => typeof cell === 'number')){
                     costsRowIndex = i;
                     break;
                 }
             }
-
-            if (costsRowIndex === -1) {
-                throw new Error("No se encontró la fila de costos de herramientas por encima de los encabezados.");
-            }
+            if (costsRowIndex === -1) throw new Error("No se encontró la fila de costos de herramientas.");
 
             const toolNamesRow = jsonData[costsRowIndex-1].map(h => typeof h === 'string' ? h.trim() : h);
             const toolCostsRow = jsonData[costsRowIndex];
@@ -172,10 +153,7 @@
                     tools.push({ name: name, cost: cost });
                 }
             }
-
-            if (tools.length === 0) {
-                throw new Error("No se encontraron herramientas con costos válidos en el archivo.");
-            }
+            if (tools.length === 0) throw new Error("No se encontraron herramientas con costos válidos.");
 
             const nominaIndex = headerRowData.indexOf('# Nomina');
             const nombreIndex = headerRowData.indexOf('Nombre');
@@ -189,10 +167,10 @@
                 const fechaIngresoRaw = row[fechaIndex];
                 let fechaIngresoFormatted = null;
                 if (fechaIngresoRaw) {
-                    if (typeof fechaIngresoRaw === 'number') { // Formato de fecha de Excel (número de serie)
+                    if (typeof fechaIngresoRaw === 'number') {
                         const date = XLSX.SSF.parse_date_code(fechaIngresoRaw);
                         fechaIngresoFormatted = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-                    } else if (typeof fechaIngresoRaw === 'string') { // Formato de fecha como texto (MM/DD/YYYY)
+                    } else if (typeof fechaIngresoRaw === 'string') {
                         const parts = fechaIngresoRaw.split('/');
                         if (parts.length === 3) {
                             fechaIngresoFormatted = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
@@ -205,10 +183,7 @@
                     const toolName = headerRowData[i];
                     const quantity = row[i];
                     if(toolName && quantity && typeof quantity === 'number' && quantity > 0) {
-                        prestamos.push({
-                            herramienta: toolName,
-                            cantidad: quantity
-                        });
+                        prestamos.push({ herramienta: toolName, cantidad: quantity });
                     }
                 }
 
@@ -221,39 +196,25 @@
                 };
             }).filter(Boolean);
 
-            const payload = {
-                herramientas: tools,
-                empleados: employeeData
-            };
+            const payload = { herramientas: tools, empleados: employeeData };
 
-            const response = await fetch('api_cargar.php', {
+            const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-
             const result = await response.json();
 
             if (result.success) {
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡Éxito!',
-                    text: result.message
-                });
+                Swal.fire({ icon: 'success', title: '¡Éxito!', text: result.message });
             } else {
                 throw new Error(result.message || 'Ocurrió un error en el servidor.');
             }
-
         } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error al procesar',
-                text: error.message
-            });
+            Swal.fire({ icon: 'error', title: 'Error al procesar', text: error.message });
             console.error(error);
         }
     }
-
 
     // --- LÓGICA PARA BÚSQUEDA Y REPORTE ---
     const searchButton = document.getElementById('searchButton');
@@ -266,22 +227,14 @@
             Swal.fire('Atención', 'Por favor, ingresa un número de nómina.', 'warning');
             return;
         }
-
         reportResultDiv.innerHTML = `<p class="text-center">Buscando...</p>`;
-
         try {
+            // CORRECCIÓN: Se usa la ruta relativa al API
             const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_get_single_employee.php?nomina=${nomina}`);
-            if (!response.ok) {
-                throw new Error('Error en la respuesta del servidor.');
-            }
+            if (!response.ok) throw new Error('Error en la respuesta del servidor.');
             const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
+            if (data.error) throw new Error(data.error);
             displayEmployeeResult(data);
-
         } catch (error) {
             reportResultDiv.innerHTML = '';
             Swal.fire('Error', error.message, 'error');
@@ -296,7 +249,6 @@
     function displayEmployeeResult(employee) {
         const estadoClass = employee.estado === 'Deudor' ? 'text-red-400 bg-red-900 bg-opacity-50' : 'text-green-400 bg-green-900 bg-opacity-50';
         const buttonText = employee.estado === 'Deudor' ? 'Descargar Carta de Adeudo' : 'Descargar Carta de No Adeudo';
-
         reportResultDiv.innerHTML = `
             <div class="overflow-x-auto rounded-lg border border-gray-700">
                 <table class="min-w-full text-left text-sm">
@@ -327,9 +279,10 @@
         `;
     }
 
+    // --- LÓGICA PARA GENERAR PDF ---
     const loadImage = (src) => new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // Necesario si la imagen está en otro dominio
+        img.crossOrigin = "Anonymous";
         img.onload = () => {
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
@@ -342,30 +295,30 @@
         img.src = src;
     });
 
-    // --- LÓGICA PARA GENERAR PDF ---
     async function generatePdf(nomina, nombre, estado) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
 
-        // 1. Especifica la ruta a tu imagen en el servidor
-        const imageUrl = 'images/logo.png'; // Cambia esto por la ruta correcta, ej: 'images/logo.png'
-
+        const imageUrl = 'images/logo.png';
         try {
             const logoData = await loadImage(imageUrl);
-            // 2. Agrega la imagen al PDF
-            // doc.addImage(data, 'FORMATO', x, y, ancho, alto);
-            doc.addImage(logoData, 'PNG', 85, 15, 40, 15);
+            // La imagen original es 650x400. La escalamos a un ancho de 60 para que quepa bien.
+            const imgWidth = 60;
+            const imgHeight = (400 / 650) * imgWidth; // Mantenemos la proporción
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const x = (pageWidth - imgWidth) / 2; // Centramos la imagen
+            doc.addImage(logoData, 'PNG', x, 15, imgWidth, imgHeight);
         } catch (error) {
             console.error("Error al cargar la imagen:", error);
-            // Opcional: puedes continuar sin el logo si falla
         }
 
-        const responsable = "JAIR"; // Variable para el responsable
+        const responsable = "JAIR";
         const hoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 
         if (estado === 'Deudor') {
             try {
-                const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
+                // CORRECCIÓN: Se usa la ruta relativa al API
+                const response = await fetch(`api_consulta.php?nomina=${nomina}`);
                 const data = await response.json();
                 if (data.error || !data.prestamos) throw new Error('No se pudo obtener el detalle del adeudo.');
 
@@ -381,22 +334,19 @@
                         body.push([item.herramienta, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
                     }
                 });
+                if (totalRow) { totalAmount = parseFloat(totalRow.cantidad); }
 
-                if (totalRow) {
-                    totalAmount = parseFloat(totalRow.cantidad);
-                }
-
-                // --- Contenido de la Carta de Adeudo ---
+                // --- Contenido de la Carta de Adeudo (con coordenadas ajustadas) ---
                 doc.setFontSize(14).setFont(undefined, 'bold');
-                doc.text("Carta De Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
+                doc.text("Carta De Adeudo De Material y Herramienta", 105, 55, { align: 'center' });
 
                 doc.setFontSize(11).setFont(undefined, 'normal');
-                let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con numero de nómina ${nomina} ha quedado a deber material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades; por lo cual me permito expedir el siguiente formato que hace constar el adeudo de material de la persona antes mencionada.\n\nTeniendo en cuenta que el material adeudado se descontará por vía nómina, se describen las cantidades y la descripción del material para los fines requeridos en el área de Recursos Humanos:`;
-                const splitText = doc.splitTextToSize(text, 180);
-                doc.text(splitText, 15, 35);
+                let textAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con numero de nómina ${nomina} ha quedado a deber material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades; por lo cual me permito expedir el siguiente formato que hace constar el adeudo de material de la persona antes mencionada.\n\nTeniendo en cuenta que el material adeudado se descontará por vía nómina, se describen las cantidades y la descripción del material para los fines requeridos en el área de Recursos Humanos:`;
+                const splitTextAdeudo = doc.splitTextToSize(textAdeudo, 180);
+                doc.text(splitTextAdeudo, 15, 65);
 
                 doc.autoTable({
-                    startY: doc.previousAutoTable ? doc.previousAutoTable.finalY + 10 : 75,
+                    startY: 105,
                     head: [['Herramienta', 'Cantidad', 'Costo Unitario', 'Subtotal']],
                     body: body,
                     theme: 'grid'
@@ -408,16 +358,16 @@
 
                 finalY += 30;
                 doc.setFontSize(11).setFont(undefined, 'normal');
-                doc.text(`A continuación, con fecha de _______________________ se firma de conformidad el presente documento por parte de las personas involucradas en la liberación de este.`, 15, finalY);
+                doc.text(`A continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`, 15, finalY);
 
                 finalY += 30;
                 doc.text("___________________________________", 15, finalY);
                 doc.text(nombre.toUpperCase(), 15, finalY + 5);
-                doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA MATERIAL", 15, finalY + 10);
+                doc.text("NOMBRE Y FIRMA DE QUIEN ADEUDA", 15, finalY + 10);
 
                 doc.text("___________________________________", 115, finalY);
                 doc.text(responsable.toUpperCase(), 115, finalY + 5);
-                doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 10);
+                doc.text("TOOLCRIB - RESPONSABLE", 115, finalY + 10);
 
                 doc.save(`Carta_Adeudo_${nomina}.pdf`);
 
@@ -425,19 +375,19 @@
                 Swal.fire('Error', error.message, 'error');
             }
         } else {
-            // --- Contenido de la Carta de No Adeudo ---
+            // --- Contenido de la Carta de No Adeudo (con coordenadas ajustadas) ---
             doc.setFontSize(14).setFont(undefined, 'bold');
-            doc.text("Carta De No Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
+            doc.text("Carta De No Adeudo De Material y Herramienta", 105, 55, { align: 'center' });
 
             doc.setFontSize(11).setFont(undefined, 'normal');
-            let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ______________________ se firma de conformidad el presente documento por parte de las personas involucradas en la liberación de este. .`;
-            const splitText = doc.splitTextToSize(text, 180);
-            doc.text(splitText, 15, 40);
+            let textNoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`;
+            const splitTextNoAdeudo = doc.splitTextToSize(textNoAdeudo, 180);
+            doc.text(splitTextNoAdeudo, 15, 65);
 
-            let finalY = 100;
+            let finalY = 120;
             doc.text("___________________________________", 15, finalY);
             doc.text(nombre.toUpperCase(), 15, finalY + 5);
-            doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA MATERIAL", 15, finalY + 10);
+            doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA", 15, finalY + 10);
 
             doc.text("___________________________________", 115, finalY);
             doc.text(responsable.toUpperCase(), 115, finalY + 5);
