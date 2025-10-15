@@ -341,7 +341,7 @@
                 doc.setFontSize(11).setFont(undefined, 'normal');
                 let textAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con numero de nómina ${nomina} ha quedado a deber material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades; por lo cual me permito expedir el siguiente formato que hace constar el adeudo de material de la persona antes mencionada.\n\nTeniendo en cuenta que el material adeudado se descontará por vía nómina, se describen las cantidades y la descripción del material para los fines requeridos en el área de Recursos Humanos:`;
                 const splitTextAdeudo = doc.splitTextToSize(textAdeudo, 180);
-                doc.text(splitTextAdeudo, 15, 65);
+                doc.text(splitTextAdeudo, 15, 75);
 
                 doc.autoTable({
                     startY: 105,
