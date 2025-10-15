@@ -1,55 +1,49 @@
 <?php
 header('Content-Type: application/json');
-// Se ajusta la ruta para que coincida con tu estructura de carpetas.
-include_once('db/db.php');
+require_once 'db/db.php';
 
 try {
-    // CORRECCIÓN: Se usa el nombre de la clase correcto para la conexión.
+    // Se usa el nombre de la clase correcto para la conexión.
     $conector = new ToolcribDB();
     $conexion = $conector->conectar();
 
-    // Consulta para obtener todos los empleados de la tabla Empleados
-    $stmt = $conexion->prepare(
-        "SELECT id_nomina, nombre FROM Empleados"
-    );
+    // CONSULTA OPTIMIZADA:
+    // Se combina la obtención de empleados y la verificación de deudas en una sola consulta
+    // usando LEFT JOIN y un CASE para determinar el estado. Esto es mucho más eficiente.
+    $stmt = $conexion->prepare("
+        SELECT
+            e.id_nomina AS nomina,
+            e.nombre,
+            CASE
+                WHEN COUNT(DISTINCT CASE WHEN h.nombre <> 'Total' THEN p.id_prestamo END) > 0 THEN 'Deudor'
+                ELSE 'No Deudor'
+            END AS estado
+        FROM
+            Empleados e
+        LEFT JOIN
+            Prestamos p ON e.id_nomina = p.id_nomina
+        LEFT JOIN
+            Herramientas h ON p.id_herramienta = h.id_herramienta
+        GROUP BY
+            e.id_nomina, e.nombre
+        ORDER BY
+            e.nombre ASC
+    ");
+
     $stmt->execute();
     $resultado = $stmt->get_result();
 
-    $empleados = [];
-    while ($fila = $resultado->fetch_assoc()) {
-        $empleados[$fila['id_nomina']] = [
-            'nomina' => $fila['id_nomina'],
-            'nombre' => $fila['nombre'],
-            'estado' => 'No Deudor' // Por defecto, no son deudores
-        ];
-    }
+    // Se obtienen todos los resultados directamente en un array.
+    $empleados = $resultado->fetch_all(MYSQLI_ASSOC);
+
     $stmt->close();
-
-    // Consulta para verificar quiénes tienen préstamos (son deudores)
-    $stmtDeudores = $conexion->prepare(
-        "SELECT DISTINCT p.id_nomina 
-         FROM Prestamos p
-         JOIN Herramientas h ON p.id_herramienta = h.id_herramienta
-         WHERE h.nombre <> 'Total'"
-    );
-    $stmtDeudores->execute();
-    $resultadoDeudores = $stmtDeudores->get_result();
-
-    while ($filaDeudor = $resultadoDeudores->fetch_assoc()) {
-        if (isset($empleados[$filaDeudor['id_nomina']])) {
-            $empleados[$filaDeudor['id_nomina']]['estado'] = 'Deudor';
-        }
-    }
-    $stmtDeudores->close();
-
     $conexion->close();
 
-    echo json_encode(array_values($empleados));
+    echo json_encode($empleados);
 
 } catch (Exception $e) {
     // Se envía una respuesta JSON detallada en caso de error.
     http_response_code(500);
-    // Esto te dirá exactamente qué está fallando (ej: "Conexión rechazada", "Tabla no encontrada", etc.)
     echo json_encode(['error' => 'Error en el servidor: ' . $e->getMessage()]);
 }
 ?>
