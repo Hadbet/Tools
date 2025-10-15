@@ -270,7 +270,7 @@
         reportResultDiv.innerHTML = `<p class="text-center">Buscando...</p>`;
 
         try {
-            const response = await fetch(`api_get_single_employee.php?nomina=${nomina}`);
+            const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_get_single_employee.php?nomina=${nomina}`);
             if (!response.ok) {
                 throw new Error('Error en la respuesta del servidor.');
             }
