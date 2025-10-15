@@ -383,7 +383,7 @@
             const splitTextNoAdeudo = doc.splitTextToSize(textNoAdeudo, 180);
             doc.text(splitTextNoAdeudo, 15, 90);
 
-            let finalY = 120;
+            let finalY = 150;
             doc.text("___________________________________", 15, finalY);
             doc.text(nombre.toUpperCase(), 15, finalY + 5);
             doc.text("NOMBRE Y FIRMA DE QUIEN ENTREGA", 15, finalY + 10);
