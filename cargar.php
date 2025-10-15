@@ -318,7 +318,7 @@
         if (estado === 'Deudor') {
             try {
                 // CORRECCIÓN: Se usa la ruta relativa al API
-                const response = await fetch(`api_consulta.php?nomina=${nomina}`);
+                const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
                 const data = await response.json();
                 if (data.error || !data.prestamos) throw new Error('No se pudo obtener el detalle del adeudo.');
 
