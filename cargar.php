@@ -303,9 +303,9 @@
         try {
             const logoData = await loadImage(imageUrl);
             // La imagen original es 650x400. La escalamos a un ancho de 60 para que quepa bien.
-            const imgWidth = 60;
+            const imgWidth = 50;
             const imgHeight = (400 / 650) * imgWidth; // Mantenemos la proporción
-            doc.addImage(logoData, 'PNG', 5, 10, imgWidth, imgHeight);
+            doc.addImage(logoData, 'PNG', 15, 10, imgWidth, imgHeight);
         } catch (error) {
             console.error("Error al cargar la imagen:", error);
         }
