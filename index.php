@@ -24,7 +24,7 @@
 <body>
 <video autoplay muted loop id="video-bg">
     <!-- IMPORTANTE: Crea una carpeta 'videos' y pon un video llamado 'background.mp4' dentro -->
-    <source src="videos/background.mp4" type="video/mp4">
+    <source src="https://grammermx.com/AleTest/ATS/videos/Video.mp4" type="video/mp4">
     Tu navegador no soporta videos de fondo.
 </video>
 
