@@ -305,9 +305,7 @@
             // La imagen original es 650x400. La escalamos a un ancho de 60 para que quepa bien.
             const imgWidth = 60;
             const imgHeight = (400 / 650) * imgWidth; // Mantenemos la proporción
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const x = (pageWidth - imgWidth) / 2; // Centramos la imagen
-            doc.addImage(logoData, 'PNG', x, 15, imgWidth, imgHeight);
+            doc.addImage(logoData, 'PNG', 5, 10, imgWidth, imgHeight);
         } catch (error) {
             console.error("Error al cargar la imagen:", error);
         }
