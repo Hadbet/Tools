@@ -327,10 +327,38 @@
         `;
     }
 
+    const loadImage = (src) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; // Necesario si la imagen está en otro dominio
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = (err) => reject(err);
+        img.src = src;
+    });
+
     // --- LÓGICA PARA GENERAR PDF ---
     async function generatePdf(nomina, nombre, estado) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+
+        // 1. Especifica la ruta a tu imagen en el servidor
+        const imageUrl = 'images/logo.png'; // Cambia esto por la ruta correcta, ej: 'images/logo.png'
+
+        try {
+            const logoData = await loadImage(imageUrl);
+            // 2. Agrega la imagen al PDF
+            // doc.addImage(data, 'FORMATO', x, y, ancho, alto);
+            doc.addImage(logoData, 'PNG', 85, 15, 40, 15);
+        } catch (error) {
+            console.error("Error al cargar la imagen:", error);
+            // Opcional: puedes continuar sin el logo si falla
+        }
 
         const responsable = "JAIR"; // Variable para el responsable
         const hoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -380,7 +408,7 @@
 
                 finalY += 30;
                 doc.setFontSize(11).setFont(undefined, 'normal');
-                doc.text(`A continuación, con fecha de ${hoy} se firma de conformidad.`, 15, finalY);
+                doc.text(`A continuación, con fecha de _______________________ se firma de conformidad el presente documento por parte de las personas involucradas en la liberación de este.`, 15, finalY);
 
                 finalY += 30;
                 doc.text("___________________________________", 15, finalY);
@@ -389,7 +417,7 @@
 
                 doc.text("___________________________________", 115, finalY);
                 doc.text(responsable.toUpperCase(), 115, finalY + 5);
-                doc.text("TOOLCRIB - RESPONSABLE", 115, finalY + 10);
+                doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 10);
 
                 doc.save(`Carta_Adeudo_${nomina}.pdf`);
 
@@ -402,7 +430,7 @@
             doc.text("Carta De No Adeudo De Material y Herramienta", 105, 20, { align: 'center' });
 
             doc.setFontSize(11).setFont(undefined, 'normal');
-            let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`;
+            let text = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ______________________ se firma de conformidad el presente documento por parte de las personas involucradas en la liberación de este. .`;
             const splitText = doc.splitTextToSize(text, 180);
             doc.text(splitText, 15, 40);
 
