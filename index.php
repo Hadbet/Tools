@@ -74,7 +74,7 @@
             const result = await response.json();
 
             if (result.success) {
-                window.location.href = 'index.html';
+                window.location.href = 'cargar.php';
             } else {
                 Swal.fire({
                     icon: 'error',
