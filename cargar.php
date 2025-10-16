@@ -357,7 +357,7 @@
 
                 finalY += 30;
                 doc.setFontSize(11).setFont(undefined, 'normal');
-                doc.text(`A continuación, con fecha de ________________ se firma de conformidad el presente documento.`, 15, finalY);
+                doc.text(`A continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`, 15, finalY);
 
                 finalY += 30;
                 doc.text("___________________________________", 15, finalY);
@@ -379,7 +379,7 @@
             doc.text("Carta De No Adeudo De Material y Herramienta", 105, 70, { align: 'center' });
 
             doc.setFontSize(11).setFont(undefined, 'normal');
-            let textNoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ________________ se firma de conformidad el presente documento.`;
+            let textNoAdeudo = `Por medio de la presente se hace constar que el Sr. ${nombre} con número de nómina ${nomina} ha entregado completamente el material que le fue asignado como préstamo por el área de almacén para el desarrollo de sus actividades, por lo cual me permito expedir el siguiente formato que hace constar el no adeudo de material de la persona antes mencionada.\n\nA continuación, con fecha de ${hoy} se firma de conformidad el presente documento.`;
             const splitTextNoAdeudo = doc.splitTextToSize(textNoAdeudo, 180);
             doc.text(splitTextNoAdeudo, 15, 90);
 
@@ -392,8 +392,8 @@
             doc.text(responsable.toUpperCase(), 115, finalY + 10);
             doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 15);
 
-            doc.text("___________________________________", 70, 200);
-            doc.text("METROLOGÍA - RESPONSABLE DEL ÁREA", 70, 200 + 10);
+            doc.text("___________________________________", 65, 200);
+            doc.text("METROLOGÍA - RESPONSABLE DEL ÁREA", 65, 200 + 10);
 
             doc.save(`Carta_No_Adeudo_${nomina}.pdf`);
         }
