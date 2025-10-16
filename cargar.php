@@ -392,9 +392,8 @@
             doc.text(responsable.toUpperCase(), 115, finalY + 10);
             doc.text("TOOLCRIB - RESPONSABLE DEL ÁREA", 115, finalY + 15);
 
-            doc.text("___________________________________", 50, 200);
-            doc.text(responsable.toUpperCase(), 50, 200 + 10);
-            doc.text("METROLOGÍA - RESPONSABLE DEL ÁREA", 50, 200 + 15);
+            doc.text("___________________________________", 70, 200);
+            doc.text("METROLOGÍA - RESPONSABLE DEL ÁREA", 70, 200 + 10);
 
             doc.save(`Carta_No_Adeudo_${nomina}.pdf`);
         }
