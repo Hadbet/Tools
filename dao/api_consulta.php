@@ -1,7 +1,7 @@
 <?php
 // api_consulta.php
 header('Content-Type: application/json');
-include_once('db/db.php');
+include_once('db/db.php'); // Ajustada la ruta de inclusión
 
 $response = [];
 
@@ -34,10 +34,9 @@ try {
     }
     $stmt_emp->close();
 
-    // 2. Obtener préstamos de herramientas
-    // CORRECCIÓN: Se arregló un typo en "h.id_herramienta" que causaba el error en el cálculo del total.
+    // 2. Obtener préstamos de herramientas (SE AÑADE p.fecha_prestamo)
     $stmt = $conex->prepare(
-        "SELECT h.nombre AS herramienta, p.cantidad, h.costo 
+        "SELECT h.nombre AS herramienta, p.cantidad, h.costo, p.fecha_prestamo 
          FROM Prestamos p
          JOIN Herramientas h ON p.id_herramienta = h.id_herramienta
          WHERE p.id_nomina = ?"
@@ -63,4 +62,3 @@ try {
 
 echo json_encode($response);
 ?>
-

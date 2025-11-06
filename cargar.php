@@ -51,7 +51,7 @@
 <div class="main-container rounded-2xl p-8 max-w-7xl w-full mx-auto shadow-2xl">
     <!-- Barra de Navegación -->
     <nav class="flex justify-center items-center gap-8 mb-8 border-b border-gray-700 pb-4">
-        <a href="#" class="nav-link active font-semibold text-lg py-2">Inicio</a>
+        <a href="index.php" class="nav-link active font-semibold text-lg py-2">Inicio</a>
         <a href="gestion_usuarios.php" class="nav-link font-semibold text-lg py-2">Usuarios</a>
         <a href="dao/logout.php" class="nav-link font-semibold text-lg py-2 text-red-400 hover:text-red-300">Cerrar Sesión</a>
     </nav>
@@ -99,6 +99,26 @@
         }
     });
 
+    // Función auxiliar para formatear fechas
+    const formatDate = (excelDate) => {
+        if (!excelDate || (typeof excelDate === 'string' && excelDate.toUpperCase() === 'M-D-A')) return null;
+        if (excelDate instanceof Date) return excelDate.toISOString().split('T')[0];
+
+        if (typeof excelDate === 'number') { // Formato de fecha de Excel (número de serie)
+            const date = XLSX.SSF.parse_date_code(excelDate);
+            return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+        }
+        if (typeof excelDate === 'string') { // Formato de fecha como texto (MM/DD/YYYY)
+            const parts = excelDate.split('/');
+            if (parts.length === 3) {
+                // Asumiendo formato M/D/YYYY
+                return `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+            }
+        }
+        return null; // Retorna null si no se puede parsear
+    };
+
+
     async function processExcelFile(file) {
         Swal.fire({
             title: 'Procesando archivo',
@@ -111,7 +131,7 @@
 
         try {
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data);
+            const workbook = XLSX.read(data, { cellDates: true }); // cellDates: true es importante
 
             let targetSheet = null;
             for (const name of workbook.SheetNames) {
@@ -146,15 +166,24 @@
             const toolNamesRow = jsonData[costsRowIndex-1].map(h => typeof h === 'string' ? h.trim() : h);
             const toolCostsRow = jsonData[costsRowIndex];
 
+            // --- LÓGICA DE HERRAMIENTAS ACTUALIZADA ---
             const tools = [];
-            for(let i = 0; i < toolNamesRow.length; i++){
+            // Iteramos de 2 en 2, ya que ahora es Herramienta | Fecha
+            for(let i = 0; i < toolNamesRow.length; i += 2) {
                 const name = toolNamesRow[i];
                 const cost = toolCostsRow[i];
-                if(name && typeof cost === 'number'){
-                    tools.push({ name: name, cost: cost });
+                // Aseguramos que sea una herramienta válida con costo numérico
+                if(name && typeof cost === 'number' && name.toLowerCase() !== 'total') {
+                    tools.push({
+                        name: name,
+                        cost: cost,
+                        quantityColumnIndex: i, // Columna de la cantidad
+                        dateColumnIndex: i + 1   // Columna de la fecha
+                    });
                 }
             }
             if (tools.length === 0) throw new Error("No se encontraron herramientas con costos válidos.");
+            // --- FIN LÓGICA DE HERRAMIENTAS ---
 
             const nominaIndex = headerRowData.indexOf('# Nomina');
             const nombreIndex = headerRowData.indexOf('Nombre');
@@ -165,28 +194,22 @@
                 const nomina = row[nominaIndex];
                 if (!nomina || isNaN(parseInt(nomina))) return null;
 
-                const fechaIngresoRaw = row[fechaIndex];
-                let fechaIngresoFormatted = null;
-                if (fechaIngresoRaw) {
-                    if (typeof fechaIngresoRaw === 'number') {
-                        const date = XLSX.SSF.parse_date_code(fechaIngresoRaw);
-                        fechaIngresoFormatted = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-                    } else if (typeof fechaIngresoRaw === 'string') {
-                        const parts = fechaIngresoRaw.split('/');
-                        if (parts.length === 3) {
-                            fechaIngresoFormatted = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
-                        }
-                    }
-                }
+                const fechaIngresoFormatted = formatDate(row[fechaIndex]);
 
+                // --- LÓGICA DE PRÉSTAMOS ACTUALIZADA ---
                 const prestamos = [];
-                for(let i = fechaIndex + 1; i < headerRowData.length; i++) {
-                    const toolName = headerRowData[i];
-                    const quantity = row[i];
-                    if(toolName && quantity && typeof quantity === 'number' && quantity > 0) {
-                        prestamos.push({ herramienta: toolName, cantidad: quantity });
+                tools.forEach(tool => {
+                    const quantity = row[tool.quantityColumnIndex];
+                    if(quantity && typeof quantity === 'number' && quantity > 0) {
+                        const fechaPrestamoRaw = row[tool.dateColumnIndex];
+                        prestamos.push({
+                            herramienta: tool.name,
+                            cantidad: quantity,
+                            fecha_prestamo: formatDate(fechaPrestamoRaw) // Usamos la misma función
+                        });
                     }
-                }
+                });
+                // --- FIN LÓGICA DE PRÉSTAMOS ---
 
                 return {
                     nomina: nomina,
@@ -195,10 +218,11 @@
                     fecha_ingreso: fechaIngresoFormatted,
                     prestamos: prestamos
                 };
-            }).filter(Boolean);
+            }).filter(Boolean); // Filtra filas nulas
 
             const payload = { herramientas: tools, empleados: employeeData };
 
+            // Apuntamos a la API local
             const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -230,7 +254,7 @@
         }
         reportResultDiv.innerHTML = `<p class="text-center">Buscando...</p>`;
         try {
-            // CORRECCIÓN: Se usa la ruta relativa al API
+            // Apuntamos a la API local
             const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_get_single_employee.php?nomina=${nomina}`);
             if (!response.ok) throw new Error('Error en la respuesta del servidor.');
             const data = await response.json();
@@ -303,20 +327,19 @@
         const imageUrl = 'images/logo.png';
         try {
             const logoData = await loadImage(imageUrl);
-            // La imagen original es 650x400. La escalamos a un ancho de 60 para que quepa bien.
             const imgWidth = 50;
-            const imgHeight = (400 / 650) * imgWidth; // Mantenemos la proporción
+            const imgHeight = (400 / 650) * imgWidth;
             doc.addImage(logoData, 'PNG', 15, 10, imgWidth, imgHeight);
         } catch (error) {
             console.error("Error al cargar la imagen:", error);
         }
 
-        const responsable = "<?php echo $_SESSION['Nombre'];?>";
+        const responsable = "<?php echo addslashes($_SESSION['Nombre']);?>"; // Escapamos el nombre por si tiene comillas
         const hoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 
         if (estado === 'Deudor') {
             try {
-                // CORRECCIÓN: Se usa la ruta relativa al API
+                // Apuntamos a la API local
                 const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
                 const data = await response.json();
                 if (data.error || !data.prestamos) throw new Error('No se pudo obtener el detalle del adeudo.');
@@ -330,12 +353,20 @@
                         totalRow = item;
                     } else {
                         const subtotal = item.cantidad * item.costo;
-                        body.push([item.herramienta, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
+                        // --- LÓGICA DE FECHA PARA PDF ---
+                        let fechaFormateada = 'Indefinida';
+                        if (item.fecha_prestamo) {
+                            try {
+                                const parts = item.fecha_prestamo.split('-');
+                                if (parts.length === 3) fechaFormateada = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                            } catch (e) {}
+                        }
+                        // --- FIN LÓGICA DE FECHA PDF ---
+                        body.push([item.herramienta, fechaFormateada, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
                     }
                 });
                 if (totalRow) { totalAmount = parseFloat(totalRow.cantidad); }
 
-                // --- Contenido de la Carta de Adeudo (con coordenadas ajustadas) ---
                 doc.setFontSize(14).setFont(undefined, 'bold');
                 doc.text("Carta De Adeudo De Material y Herramienta", 105, 58, { align: 'center' });
 
@@ -346,7 +377,7 @@
 
                 doc.autoTable({
                     startY: 115,
-                    head: [['Herramienta', 'Cantidad', 'Costo Unitario', 'Subtotal']],
+                    head: [['Herramienta', 'Fecha Préstamo', 'Cantidad', 'Costo Unitario', 'Subtotal']], // Encabezado actualizado
                     body: body,
                     theme: 'grid'
                 });
@@ -374,7 +405,7 @@
                 Swal.fire('Error', error.message, 'error');
             }
         } else {
-            // --- Contenido de la Carta de No Adeudo (con coordenadas ajustadas) ---
+            // --- Contenido de la Carta de No Adeudo ---
             doc.setFontSize(14).setFont(undefined, 'bold');
             doc.text("Carta De No Adeudo De Material y Herramienta", 105, 70, { align: 'center' });
 
@@ -401,4 +432,3 @@
 </script>
 </body>
 </html>
-
