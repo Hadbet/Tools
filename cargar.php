@@ -99,23 +99,30 @@
         }
     });
 
-    // Función auxiliar para formatear fechas
+    // Función auxiliar para formatear fechas de Excel a YYYY-MM-DD
     const formatDate = (excelDate) => {
         if (!excelDate || (typeof excelDate === 'string' && excelDate.toUpperCase() === 'M-D-A')) return null;
-        if (excelDate instanceof Date) return excelDate.toISOString().split('T')[0];
 
+        let date;
         if (typeof excelDate === 'number') { // Formato de fecha de Excel (número de serie)
-            const date = XLSX.SSF.parse_date_code(excelDate);
-            return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-        }
-        if (typeof excelDate === 'string') { // Formato de fecha como texto (MM/DD/YYYY)
+            date = XLSX.SSF.parse_date_code(excelDate);
+        } else if (typeof excelDate === 'string') { // Formato de fecha como texto (MM/DD/YYYY)
             const parts = excelDate.split('/');
             if (parts.length === 3) {
                 // Asumiendo formato M/D/YYYY
-                return `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
+                date = { y: parseInt(parts[2]), m: parseInt(parts[0]), d: parseInt(parts[1]) };
+            } else {
+                return null; // Formato de string no reconocido
             }
+        } else if (excelDate instanceof Date) {
+            return excelDate.toISOString().split('T')[0];
+        } else {
+            return null; // Tipo no reconocido
         }
-        return null; // Retorna null si no se puede parsear
+
+        if (!date || isNaN(date.y) || isNaN(date.m) || isNaN(date.d)) return null;
+
+        return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
     };
 
 
@@ -131,7 +138,7 @@
 
         try {
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, { cellDates: true }); // cellDates: true es importante
+            const workbook = XLSX.read(data, { cellDates: true });
 
             let targetSheet = null;
             for (const name of workbook.SheetNames) {
@@ -154,26 +161,69 @@
 
             let headerRowData = jsonData[headerRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
 
-            let costsRowIndex = -1;
-            for(let i = headerRowIndex; i >= 0; i--){
-                if(jsonData[i].some(cell => typeof cell === 'number')){
-                    costsRowIndex = i;
+            // --- LÓGICA DE BÚSQUEDA DE FILAS MEJORADA ---
+
+            // 1. La fila de COSTOS es la misma que la de "# Nomina"
+            const toolCostsRow = headerRowData; // headerRowData es jsonData[headerRowIndex]
+
+            // 2. Buscamos la fila de NOMBRES de herramientas (ej. "Flexometro") ARRIBA de la fila de cabecera
+            let toolNameRowIndex = -1;
+            for(let i = headerRowIndex - 1; i >= 0; i--){ // Empezamos a buscar hacia arriba
+                const row = jsonData[i];
+                if(row && row.some(cell => typeof cell === 'string' && String(cell).trim().toLowerCase() === 'flexometro')){
+                    toolNameRowIndex = i;
                     break;
                 }
             }
-            if (costsRowIndex === -1) throw new Error("No se encontró la fila de costos de herramientas.");
 
-            const toolNamesRow = jsonData[costsRowIndex-1].map(h => typeof h === 'string' ? h.trim() : h);
-            const toolCostsRow = jsonData[costsRowIndex];
+            if (toolNameRowIndex === -1) {
+                throw new Error("No se pudo encontrar la fila con nombres de herramientas (ej. 'Flexometro') encima de la fila de '# Nomina'.");
+            }
+
+            const toolNamesRow = jsonData[toolNameRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
+            // --- FIN LÓGICA DE BÚSQUEDA ---
 
             // --- LÓGICA DE HERRAMIENTAS ACTUALIZADA ---
             const tools = [];
+            let headerToolIndex = -1;
+
+            // Buscamos el inicio de las herramientas (ej. "Flexometro") en la fila de nombres
+            const flexometroIndex = toolNamesRow.findIndex(name => name && name.toLowerCase() === 'flexometro');
+
+            // Buscamos el índice de la columna "Fecha Ingreso" para saber dónde empezar a buscar costos
+            const fechaIngresoIndex = headerRowData.indexOf('Fecha Ingreso');
+
+            // Buscamos el primer costo numérico *después* de "Fecha Ingreso"
+            let firstCostIndex = -1;
+            if (fechaIngresoIndex !== -1) {
+                firstCostIndex = toolCostsRow.findIndex((cost, i) => i > fechaIngresoIndex && typeof cost === 'number');
+            } else {
+                // Fallback si no encontramos "Fecha Ingreso", buscamos el primer número
+                firstCostIndex = toolCostsRow.findIndex(cost => typeof cost === 'number');
+            }
+
+            // El índice de inicio de la herramienta es el que sea que hayamos encontrado
+            // Damos prioridad al índice de 'Flexometro' si existe y coincide con el primer costo
+            if (flexometroIndex !== -1 && flexometroIndex === firstCostIndex) {
+                headerToolIndex = flexometroIndex;
+            } else if (flexometroIndex !== -1) {
+                // Si 'Flexometro' está en una columna diferente al primer costo (raro), confiamos en 'Flexometro'
+                headerToolIndex = flexometroIndex;
+            } else if (firstCostIndex !== -1) {
+                // Si no encontramos 'Flexometro', confiamos en el primer costo
+                headerToolIndex = firstCostIndex;
+            } else {
+                throw new Error("No se encontró la columna 'Flexometro' ni ninguna columna de costo válida después de 'Fecha Ingreso'.");
+            }
+
             // Iteramos de 2 en 2, ya que ahora es Herramienta | Fecha
-            for(let i = 0; i < toolNamesRow.length; i += 2) {
+            for(let i = headerToolIndex; i < toolNamesRow.length; i += 2) {
                 const name = toolNamesRow[i];
                 const cost = toolCostsRow[i];
-                // Aseguramos que sea una herramienta válida con costo numérico
-                if(name && typeof cost === 'number' && name.toLowerCase() !== 'total') {
+
+                if(!name || (name && name.toLowerCase().includes('total'))) break;
+
+                if(name && typeof cost === 'number') {
                     tools.push({
                         name: name,
                         cost: cost,
@@ -196,7 +246,6 @@
 
                 const fechaIngresoFormatted = formatDate(row[fechaIndex]);
 
-                // --- LÓGICA DE PRÉSTAMOS ACTUALIZADA ---
                 const prestamos = [];
                 tools.forEach(tool => {
                     const quantity = row[tool.quantityColumnIndex];
@@ -205,11 +254,23 @@
                         prestamos.push({
                             herramienta: tool.name,
                             cantidad: quantity,
-                            fecha_prestamo: formatDate(fechaPrestamoRaw) // Usamos la misma función
+                            fecha_prestamo: formatDate(fechaPrestamoRaw)
                         });
                     }
                 });
-                // --- FIN LÓGICA DE PRÉSTAMOS ---
+
+                const totalColIndex = toolNamesRow.findIndex(name => name && name.toLowerCase().includes('total'));
+                if (totalColIndex !== -1) {
+                    // El total está en la fila de datos, pero en la columna de 'Total'
+                    const totalValue = row[totalColIndex];
+                    if (totalValue && typeof totalValue === 'number' && totalValue > 0) {
+                        prestamos.push({
+                            herramienta: 'Total',
+                            cantidad: totalValue,
+                            fecha_prestamo: null
+                        });
+                    }
+                }
 
                 return {
                     nomina: nomina,
@@ -218,12 +279,11 @@
                     fecha_ingreso: fechaIngresoFormatted,
                     prestamos: prestamos
                 };
-            }).filter(Boolean); // Filtra filas nulas
+            }).filter(Boolean);
 
             const payload = { herramientas: tools, empleados: employeeData };
 
-            // Apuntamos a la API local
-            const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
+            const response = await fetch('dao/api_cargar.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -254,8 +314,7 @@
         }
         reportResultDiv.innerHTML = `<p class="text-center">Buscando...</p>`;
         try {
-            // Apuntamos a la API local
-            const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_get_single_employee.php?nomina=${nomina}`);
+            const response = await fetch(`dao/api_get_single_employee.php?nomina=${nomina}`);
             if (!response.ok) throw new Error('Error en la respuesta del servidor.');
             const data = await response.json();
             if (data.error) throw new Error(data.error);
@@ -334,13 +393,12 @@
             console.error("Error al cargar la imagen:", error);
         }
 
-        const responsable = "<?php echo addslashes($_SESSION['Nombre']);?>"; // Escapamos el nombre por si tiene comillas
+        const responsable = "<?php echo addslashes($_SESSION['Nombre']);?>";
         const hoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
 
         if (estado === 'Deudor') {
             try {
-                // Apuntamos a la API local
-                const response = await fetch(`https://grammermx.com/Mantenimiento/Tools/dao/api_consulta.php?nomina=${nomina}`);
+                const response = await fetch(`dao/api_consulta.php?nomina=${nomina}`);
                 const data = await response.json();
                 if (data.error || !data.prestamos) throw new Error('No se pudo obtener el detalle del adeudo.');
 
@@ -353,7 +411,6 @@
                         totalRow = item;
                     } else {
                         const subtotal = item.cantidad * item.costo;
-                        // --- LÓGICA DE FECHA PARA PDF ---
                         let fechaFormateada = 'Indefinida';
                         if (item.fecha_prestamo) {
                             try {
@@ -361,10 +418,10 @@
                                 if (parts.length === 3) fechaFormateada = `${parts[2]}/${parts[1]}/${parts[0]}`;
                             } catch (e) {}
                         }
-                        // --- FIN LÓGICA DE FECHA PDF ---
                         body.push([item.herramienta, fechaFormateada, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
                     }
                 });
+
                 if (totalRow) { totalAmount = parseFloat(totalRow.cantidad); }
 
                 doc.setFontSize(14).setFont(undefined, 'bold');
@@ -377,7 +434,7 @@
 
                 doc.autoTable({
                     startY: 115,
-                    head: [['Herramienta', 'Fecha Préstamo', 'Cantidad', 'Costo Unitario', 'Subtotal']], // Encabezado actualizado
+                    head: [['Herramienta', 'Fecha Préstamo', 'Cantidad', 'Costo Unitario', 'Subtotal']],
                     body: body,
                     theme: 'grid'
                 });
