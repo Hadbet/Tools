@@ -2,6 +2,10 @@
 header('Content-Type: application/json');
 require_once 'db/db.php';
 
+// --- NOTA: No se necesitaron cambios en este archivo ---
+// Su lógica solo comprueba SI existen deudas (COUNT > 0),
+// no le importa qué herramientas son o cuándo se entregaron.
+
 if (!isset($_GET['nomina']) || empty($_GET['nomina'])) {
     http_response_code(400);
     echo json_encode(['error' => 'Número de nómina no proporcionado.']);

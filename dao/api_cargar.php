@@ -1,13 +1,13 @@
 <?php
 // api_cargar.php
 header('Content-Type: application/json');
-include_once('../db/db.php'); // Ajustada la ruta de inclusión
+include_once('db/db.php');
 
 $response = ['success' => false, 'message' => ''];
 $input = json_decode(file_get_contents('php://input'), true);
 
-// Se cambió 'tools' a 'herramientas' y 'employeeData' a 'empleados' para coincidir con el JS
-if (empty($input) || !isset($input['herramientas']) || !isset($input['empleados'])) {
+// Las claves 'tools' y 'employeeData' deben coincidir con el payload de JS
+if (empty($input) || !isset($input['tools']) || !isset($input['employeeData'])) {
     $response['message'] = 'Datos incompletos o en formato incorrecto.';
     echo json_encode($response);
     exit;
@@ -21,14 +21,16 @@ try {
     // 1. Insertar o actualizar herramientas
     $stmt_tool = $conex->prepare("INSERT INTO Herramientas (nombre, costo) VALUES (?, ?) ON DUPLICATE KEY UPDATE costo = VALUES(costo)");
     $tool_ids = [];
-    foreach ($input['herramientas'] as $tool) {
+    foreach ($input['tools'] as $tool) {
         $stmt_tool->bind_param("sd", $tool['name'], $tool['cost']);
         $stmt_tool->execute();
 
         // Obtenemos el ID de la herramienta para usarlo en los préstamos
-        $id_herramienta_result = $conex->query("SELECT id_herramienta FROM Herramientas WHERE nombre = '" . $conex->real_escape_string($tool['name']) . "'");
-        $id_herramienta_row = $id_herramienta_result->fetch_assoc();
-        $tool_ids[$tool['name']] = $id_herramienta_row['id_herramienta'];
+        $query = "SELECT id_herramienta FROM Herramientas WHERE nombre = '" . $conex->real_escape_string($tool['name']) . "'";
+        $result = $conex->query($query);
+        if ($result && $result->num_rows > 0) {
+            $tool_ids[$tool['name']] = $result->fetch_assoc()['id_herramienta'];
+        }
     }
     $stmt_tool->close();
 
@@ -36,11 +38,12 @@ try {
     $stmt_emp = $conex->prepare("INSERT INTO Empleados (id_nomina, nombre, departamento, fecha_ingreso) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), departamento = VALUES(departamento), fecha_ingreso = VALUES(fecha_ingreso)");
     $stmt_del_prestamos = $conex->prepare("DELETE FROM Prestamos WHERE id_nomina = ?");
 
-    // --- CONSULTA DE INSERCIÓN ACTUALIZADA ---
-    // Ahora acepta 4 parámetros (el último es la fecha_prestamo, tipo 's' string)
+    // <-- INICIA BLOQUE MODIFICADO: INSERTAR FECHA DE PRESTAMO -->
+    // Se añade fecha_prestamo al INSERT. Ya no se usa CURDATE().
     $stmt_ins_prestamo = $conex->prepare("INSERT INTO Prestamos (id_nomina, id_herramienta, cantidad, fecha_prestamo) VALUES (?, ?, ?, ?)");
+    // <-- FIN BLOQUE MODIFICADO -->
 
-    foreach ($input['empleados'] as $employee) {
+    foreach ($input['employeeData'] as $employee) {
         // Insertar/Actualizar empleado
         $stmt_emp->bind_param("isss", $employee['nomina'], $employee['nombre'], $employee['departamento'], $employee['fecha_ingreso']);
         $stmt_emp->execute();
@@ -51,13 +54,18 @@ try {
 
         // Insertar los nuevos préstamos desde el archivo
         foreach ($employee['prestamos'] as $prestamo) {
-            if (isset($tool_ids[$prestamo['herramienta']])) {
-                $id_herramienta = $tool_ids[$prestamo['herramienta']];
-                $fecha = $prestamo['fecha_prestamo']; // Obtenemos la fecha del JS
+            // Asegurarse que el 'toolName' exista en nuestro array de IDs
+            if (isset($tool_ids[$prestamo['toolName']])) {
+                $id_herramienta = $tool_ids[$prestamo['toolName']];
 
-                // --- BINDING ACTUALIZADO ---
-                // i: nomina, i: id_herramienta, i: cantidad, s: fecha_prestamo
-                $stmt_ins_prestamo->bind_param("iiis", $employee['nomina'], $id_herramienta, $prestamo['cantidad'], $fecha);
+                // <-- INICIA BLOQUE MODIFICADO: BIND_PARAM CON FECHA -->
+                // Obtenemos la fecha (puede ser null si no venía en el Excel)
+                $fecha_entrega = $prestamo['fecha_prestamo'];
+
+                // Se actualiza el bind_param a 4 parámetros: i (nomina), i (id_herramienta), i (cantidad), s (fecha)
+                $stmt_ins_prestamo->bind_param("iiis", $employee['nomina'], $id_herramienta, $prestamo['quantity'], $fecha_entrega);
+                // <-- FIN BLOQUE MODIFICADO -->
+
                 $stmt_ins_prestamo->execute();
             }
         }

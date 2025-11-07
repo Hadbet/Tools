@@ -1,7 +1,7 @@
 <?php
 // api_consulta.php
 header('Content-Type: application/json');
-include_once('db/db.php'); // Ajustada la ruta de inclusión
+include_once('db/db.php');
 
 $response = [];
 
@@ -34,13 +34,17 @@ try {
     }
     $stmt_emp->close();
 
-    // 2. Obtener préstamos de herramientas (SE AÑADE p.fecha_prestamo)
+    // 2. Obtener préstamos de herramientas
+    // <-- INICIA BLOQUE MODIFICADO: AÑADIR FECHA AL SELECT -->
+    // Se añade p.fecha_prestamo a la consulta
     $stmt = $conex->prepare(
         "SELECT h.nombre AS herramienta, p.cantidad, h.costo, p.fecha_prestamo 
          FROM Prestamos p
          JOIN Herramientas h ON p.id_herramienta = h.id_herramienta
          WHERE p.id_nomina = ?"
     );
+    // <-- FIN BLOQUE MODIFICADO -->
+
     $stmt->bind_param("i", $id_nomina);
     $stmt->execute();
     $result = $stmt->get_result();
