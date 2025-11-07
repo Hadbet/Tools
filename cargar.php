@@ -134,39 +134,52 @@
 
             let headerRowData = jsonData[headerRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
 
-            let costsRowIndex = -1;
-            for(let i = headerRowIndex; i >= 0; i--){
-                // Buscamos la fila que tenga números (costos)
-                if(jsonData[i].some(cell => typeof cell === 'number')){
-                    // Verificamos que no sea la fila de Nomina (que también tiene números pero la descartamos)
-                    const nominaHeaderTest = jsonData[i].some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina');
-                    if (!nominaHeaderTest) {
-                        costsRowIndex = i;
-                        break;
-                    }
-                }
-            }
-            if (costsRowIndex === -1) throw new Error("No se encontró la fila de costos de herramientas.");
+            // <-- INICIA BLOQUE CORREGIDO: LÓGICA PARA ENCONTRAR FILAS DE NOMBRES Y COSTOS -->
 
-            // La fila de nombres de herramientas está justo encima de la de costos
-            const toolNamesRow = jsonData[costsRowIndex-1].map(h => typeof h === 'string' ? h.trim() : h);
+            // La fila de costos es LA MISMA que la fila de encabezado (según el formato de tu Excel)
+            const costsRowIndex = headerRowIndex;
+
+            // La fila de nombres de herramientas está justo ENCIMA de la fila de encabezado
+            if (costsRowIndex === 0) {
+                throw new Error("No se encontró la fila de nombres de herramientas encima de la fila de encabezados.");
+            }
+
+            // Mapeamos la fila de nombres de herramientas (la de arriba)
+            const toolNamesRow = jsonData[costsRowIndex - 1].map(h => typeof h === 'string' ? h.trim() : h);
+            // Mapeamos la fila de costos (la misma que los encabezados)
             const toolCostsRow = jsonData[costsRowIndex];
 
             const tools = [];
-            for(let i = 0; i < toolNamesRow.length; i++){
+            const fechaIndex = headerRowData.indexOf('Fecha Ingreso');
+
+            // Iteramos sobre las columnas para encontrar las herramientas
+            for(let i = fechaIndex + 1; i < toolNamesRow.length; i++){
                 const name = toolNamesRow[i];
                 const cost = toolCostsRow[i];
-                // Solo añadimos si tiene nombre Y el costo es un número
-                if(name && typeof cost === 'number'){
-                    tools.push({ name: name, cost: cost });
+
+                // Si la celda de nombre no está vacía y NO es 'Fecha' o 'M-D-A'
+                if(name && name.toLowerCase() !== 'fecha' && name.toLowerCase() !== 'm-d-a' && name.toLowerCase().trim() !== 'total') {
+
+                    // Convertimos el costo a número. El Excel puede leerlo como string.
+                    const numericCost = parseFloat(cost);
+
+                    // Si el costo es un número válido y mayor a cero
+                    if (!isNaN(numericCost) && numericCost > 0) {
+                        tools.push({ name: name, cost: numericCost });
+                    }
                 }
             }
-            if (tools.length === 0) throw new Error("No se encontraron herramientas con costos válidos.");
+
+            // Si el array 'tools' sigue vacío después del bucle, lanzamos el error
+            if (tools.length === 0) {
+                throw new Error("No se encontraron herramientas con costos válidos."); // Esta es la línea 163
+            }
+            // <-- FIN BLOQUE CORREGIDO -->
 
             const nominaIndex = headerRowData.indexOf('# Nomina');
             const nombreIndex = headerRowData.indexOf('Nombre');
             const deptoIndex = headerRowData.indexOf('Departamento');
-            const fechaIndex = headerRowData.indexOf('Fecha Ingreso');
+            // 'fechaIndex' ya está definido arriba
 
             const employeeData = jsonData.slice(headerRowIndex + 1).map(row => {
                 const nomina = row[nominaIndex];
@@ -181,62 +194,68 @@
                     } else if (typeof fechaIngresoRaw === 'string') {
                         const parts = fechaIngresoRaw.split('/');
                         if (parts.length === 3) {
-                            // Asumiendo formato M/D/Y para la fecha de ingreso
                             fechaIngresoFormatted = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
                         }
                     }
                 }
 
-                // <-- INICIA BLOQUE MODIFICADO PARA LEER FECHAS DE HERRAMIENTAS -->
+                // <-- INICIA BLOQUE CORREGIDO: LÓGICA PARA LEER PRESTAMOS -->
                 const prestamos = [];
                 // Empezamos a buscar herramientas después de "Fecha Ingreso"
-                for(let i = fechaIndex + 1; i < headerRowData.length; i++) {
-                    const toolName = headerRowData[i];
+                for(let i = fechaIndex + 1; i < toolNamesRow.length; i++) {
+                    const toolName = toolNamesRow[i];
 
                     // Omitimos columnas que no son herramientas (como 'Fecha', 'M-D-A', 'Total', etc.)
                     if (!toolName || toolName.toLowerCase() === 'fecha' || toolName.toLowerCase() === 'm-d-a' || toolName.toLowerCase().trim() === 'total') {
                         continue;
                     }
 
+                    // La cantidad está en la fila del empleado (row), en la MISMA columna (i)
+                    // (Patrón: Nombre en G8, Cantidad en G10)
+                    // ... NO, espera. El patrón del text blob es:
+                    // Fila 8: [4]Flexometro [5]Fecha [6]Tijera
+                    // Fila 10 (Aaron): [4]1 [5](empty) [6](empty)
+                    // Fila 36 (Marcela): [4](empty) [5]10/29/2025 [6]1
+
+                    // PATRÓN CORREGIDO (basado en el text blob que es más claro):
+                    // Nombre: toolNamesRow[i] (ej. Flexometro en i=4)
+                    // Cantidad: row[i] (ej. 1 en i=4 para Aaron)
+                    // Fecha: row[i+1] (ej. (empty) en i=5 para Aaron)
+
                     const quantity = row[i];
+                    const numericQuantity = parseFloat(quantity);
 
                     // Si hay una cantidad válida para esta herramienta...
-                    if(quantity && typeof quantity === 'number' && quantity > 0) {
+                    if(numericQuantity && !isNaN(numericQuantity) && numericQuantity > 0) {
                         let fechaEntrega = null;
 
-                        // Buscamos si la siguiente columna es "Fecha"
-                        if (i + 1 < headerRowData.length && headerRowData[i+1] && headerRowData[i+1].toLowerCase() === 'fecha') {
-                            const fechaRaw = row[i+1];
-                            if (fechaRaw) {
-                                // Reutilizamos la lógica de parseo de fecha
-                                if (typeof fechaRaw === 'number') {
-                                    const date = XLSX.SSF.parse_date_code(fechaRaw);
-                                    fechaEntrega = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-                                } else if (typeof fechaRaw === 'string') {
-                                    const parts = fechaRaw.split('/'); // Asume formato M/D/Y o D/M/Y
-                                    if (parts.length === 3) {
-                                        // Asumiendo M/D/Y por el ejemplo 10/29/2025
-                                        fechaEntrega = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
-                                    }
+                        // La fecha de entrega está en la fila del empleado, una columna a la derecha (i+1)
+                        const fechaRaw = (i + 1 < row.length) ? row[i+1] : undefined;
+                        if (fechaRaw) {
+                            // Reutilizamos la lógica de parseo de fecha
+                            if (typeof fechaRaw === 'number') {
+                                const date = XLSX.SSF.parse_date_code(fechaRaw);
+                                fechaEntrega = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+                            } else if (typeof fechaRaw === 'string') {
+                                const parts = fechaRaw.split('/');
+                                if (parts.length === 3) {
+                                    // Asumiendo M/D/Y por el ejemplo 10/29/2025
+                                    fechaEntrega = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
                                 }
                             }
-                            // Importante: incrementamos i para saltarnos la columna "Fecha" que acabamos de leer
-                            i++;
                         }
 
-                        // CORRECCIÓN: Tu API espera 'toolName' y 'quantity'
                         prestamos.push({
                             toolName: toolName,
-                            quantity: quantity,
-                            fecha_prestamo: fechaEntrega // <-- NUEVO: Añadimos la fecha de entrega
+                            quantity: numericQuantity,
+                            fecha_prestamo: fechaEntrega
                         });
 
-                    } else if (i + 1 < headerRowData.length && headerRowData[i+1] && headerRowData[i+1].toLowerCase() === 'fecha') {
-                        // Si no hay cantidad, pero sí hay columna "Fecha", la saltamos de todas formas
+                        // Saltamos la siguiente columna ('Fecha') para que el loop no la lea como herramienta
                         i++;
                     }
                 }
-                // <-- FIN BLOQUE MODIFICADO -->
+                // <-- FIN BLOQUE CORREGIDO -->
 
                 return {
                     nomina: nomina,
@@ -247,10 +266,10 @@
                 };
             }).filter(Boolean);
 
-            // <-- INICIA BLOQUE MODIFICADO (CORRECCIÓN DE PAYLOAD) -->
-            // Corregido para que coincida con las claves que espera tu API (tools, employeeData)
             const payload = { tools: tools, employeeData: employeeData };
-            // <-- FIN BLOQUE MODIFICADO -->
+
+            // Descomenta la siguiente línea si necesitas depurar el JSON que se envía
+            // console.log("Payload a enviar:", JSON.stringify(payload, null, 2));
 
             const response = await fetch('https://grammermx.com/Mantenimiento/Tools/dao/api_cargar.php', {
                 method: 'POST',
@@ -381,18 +400,23 @@
                     } else {
                         const subtotal = item.cantidad * item.costo;
 
-                        // <-- INICIA BLOQUE MODIFICADO: AÑADIR FECHA A LA TABLA PDF -->
                         let fechaFormateada = '';
                         if (item.fecha_prestamo) {
                             const parts = item.fecha_prestamo.split('-'); // YYYY-MM-DD
                             if(parts.length === 3) fechaFormateada = `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
                         }
-                        // Se añade la fecha como segunda columna
                         body.push([item.herramienta, fechaFormateada, item.cantidad, `$${parseFloat(item.costo).toFixed(2)}`, `$${subtotal.toFixed(2)}`]);
-                        // <-- FIN BLOQUE MODIFICADO -->
                     }
                 });
-                if (totalRow) { totalAmount = parseFloat(totalRow.cantidad); } // Asumiendo que 'cantidad' tiene el total
+
+                if (totalRow) {
+                    // El total viene en la columna 'cantidad' de la fila 'total'
+                    totalAmount = parseFloat(totalRow.cantidad);
+                } else {
+                    // Si no hay fila 'total', calculamos sumando los subtotales
+                    totalAmount = body.reduce((acc, row) => acc + parseFloat(row[4].replace('$', '')), 0);
+                }
+
 
                 // --- Contenido de la Carta de Adeudo ---
                 doc.setFontSize(14).setFont(undefined, 'bold');
@@ -405,9 +429,7 @@
 
                 doc.autoTable({
                     startY: 115,
-                    // <-- INICIA BLOQUE MODIFICADO: AÑADIR FECHA A LA TABLA PDF -->
                     head: [['Herramienta', 'Fecha Entrega', 'Cantidad', 'Costo Unitario', 'Subtotal']],
-                    // <-- FIN BLOQUE MODIFICADO -->
                     body: body,
                     theme: 'grid'
                 });
@@ -435,7 +457,7 @@
                 Swal.fire('Error', error.message, 'error');
             }
         } else {
-            // --- Contenido de la Carta de No Adeudo ---
+            // --- Contenido de la Carta de No Adeudo (sin cambios) ---
             doc.setFontSize(14).setFont(undefined, 'bold');
             doc.text("Carta De No Adeudo De Material y Herramienta", 105, 70, { align: 'center' });
 
