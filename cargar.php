@@ -116,6 +116,7 @@
             let targetSheet = null;
             for (const name of workbook.SheetNames) {
                 const sheet = workbook.Sheets[name];
+                // Usamos { header: 1 } para obtener un array de arrays (filas)
                 const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
                 if (json.some(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'))) {
                     targetSheet = sheet;
@@ -129,28 +130,34 @@
 
             const jsonData = XLSX.utils.sheet_to_json(targetSheet, { header: 1 });
 
+            // 1. Encontrar la fila de encabezados/costos (la que tiene "# Nomina")
             let headerRowIndex = jsonData.findIndex(row => row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === '# nomina'));
             if (headerRowIndex === -1) throw new Error("No se encontró la fila de encabezado con '# Nomina'.");
 
-            let headerRowData = jsonData[headerRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
+            // Esta fila contiene los encabezados (Nomina, Nombre) Y los costos de herramientas
+            const headerRowData = jsonData[headerRowIndex].map(h => typeof h === 'string' ? h.trim() : h);
+            const toolCostsRow = jsonData[headerRowIndex];
 
-            const costsRowIndex = headerRowIndex;
-
-            if (costsRowIndex === 0) {
-                throw new Error("No se encontró la fila de nombres de herramientas encima de la fila de encabezados.");
+            // 2. Encontrar la fila de NOMBRES de herramientas (la que tiene "Flexometro")
+            let toolNamesRowIndex = -1;
+            for (let i = 0; i < headerRowIndex; i++) {
+                // Buscamos en las filas *antes* de la fila de encabezados
+                if (jsonData[i].some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === 'flexometro')) {
+                    toolNamesRowIndex = i;
+                    break;
+                }
             }
+            if (toolNamesRowIndex === -1) throw new Error("No se pudo encontrar la fila de nombres de herramientas (ej. 'Flexometro'). Revisa que esté antes de '# Nomina'.");
 
-            const toolNamesRow = jsonData[costsRowIndex - 1].map(h => typeof h === 'string' ? h : '');
-            const toolCostsRow = jsonData[costsRowIndex];
+            const toolNamesRow = jsonData[toolNamesRowIndex].map(h => (typeof h === 'string' ? h.trim() : ''));
 
             const tools = [];
             const fechaIndex = headerRowData.indexOf('Fecha Ingreso');
 
-            // <-- INICIA BLOQUE CORREGIDO: BUCLE DE HERRAMIENTAS (TOOLS) -->
-            // Se itera sobre las columnas para encontrar las herramientas
+            // 3. Bucle para construir el array de 'tools' (Herramientas y Costos)
+            // (Patrón: Nombre en toolNamesRow[i], Costo en toolCostsRow[i])
             for(let i = fechaIndex + 1; i < toolNamesRow.length; i++){
-                // Se añade .trim() para limpiar espacios en blanco de los nombres
-                const name = toolNamesRow[i] ? toolNamesRow[i].trim() : '';
+                const name = toolNamesRow[i];
                 const cost = toolCostsRow[i];
 
                 // Si la celda de nombre no está vacía y NO es 'Fecha' o 'M-D-A'
@@ -165,15 +172,15 @@
             }
 
             if (tools.length === 0) {
-                // Esta es la línea 174 (o 163 en tu log anterior)
-                throw new Error("No se encontraron herramientas con costos válidos.");
+                // Esta es la línea 174
+                throw new Error("No se encontraron herramientas con costos válidos. Revisa la fila de nombres (ej. Flexometro) y la fila de costos (ej. 238).");
             }
-            // <-- FIN BLOQUE CORREGIDO -->
 
             const nominaIndex = headerRowData.indexOf('# Nomina');
             const nombreIndex = headerRowData.indexOf('Nombre');
             const deptoIndex = headerRowData.indexOf('Departamento');
 
+            // 4. Bucle para procesar los empleados y sus préstamos
             const employeeData = jsonData.slice(headerRowIndex + 1).map(row => {
                 const nomina = row[nominaIndex];
                 if (!nomina || isNaN(parseInt(nomina))) return null;
@@ -187,25 +194,26 @@
                     } else if (typeof fechaIngresoRaw === 'string') {
                         const parts = fechaIngresoRaw.split('/');
                         if (parts.length === 3) {
+                            // Asumiendo M/D/Y
                             fechaIngresoFormatted = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
                         }
                     }
                 }
 
-                // <-- INICIA BLOQUE CORREGIDO: BUCLE DE PRÉSTAMOS -->
+                // 5. Bucle para encontrar los préstamos de CADA empleado
                 const prestamos = [];
                 for(let i = fechaIndex + 1; i < toolNamesRow.length; i++) {
-                    const toolName = toolNamesRow[i] ? toolNamesRow[i].trim() : '';
+                    const toolName = toolNamesRow[i];
 
                     // Omitimos columnas que no son herramientas
                     if (!toolName || toolName.toLowerCase() === 'fecha' || toolName.toLowerCase() === 'm-d-a' || toolName.toLowerCase() === 'total') {
                         continue;
                     }
 
-                    // PATRÓN CORREGIDO (basado en la captura):
-                    // Nombre: toolNamesRow[i] (ej. G8)
-                    // Cantidad: row[i] (ej. G10)
-                    // Fecha: row[i+2] (ej. I10)
+                    // Patrón:
+                    // Nombre Herramienta: toolNamesRow[i] (ej. Col E: "Flexometro")
+                    // Cantidad: row[i] (ej. Col E: "1")
+                    // Fecha: row[i+1] (ej. Col F: "")
 
                     const quantity = row[i];
                     const numericQuantity = parseFloat(quantity);
@@ -213,8 +221,8 @@
                     if(numericQuantity && !isNaN(numericQuantity) && numericQuantity > 0) {
                         let fechaEntrega = null;
 
-                        // La fecha está dos columnas a la derecha (ej. G -> I)
-                        const fechaRaw = (i + 2 < row.length) ? row[i+2] : undefined;
+                        // La fecha está en la siguiente columna
+                        const fechaRaw = (i + 1 < row.length) ? row[i+1] : undefined;
                         if (fechaRaw) {
                             if (typeof fechaRaw === 'number') {
                                 const date = XLSX.SSF.parse_date_code(fechaRaw);
@@ -222,6 +230,7 @@
                             } else if (typeof fechaRaw === 'string') {
                                 const parts = fechaRaw.split('/');
                                 if (parts.length === 3) {
+                                    // Asumiendo M/D/Y
                                     fechaEntrega = `${parts[2]}-${String(parts[0]).padStart(2, '0')}-${String(parts[1]).padStart(2, '0')}`;
                                 }
                             }
@@ -233,11 +242,10 @@
                             fecha_prestamo: fechaEntrega
                         });
 
-                        // Saltamos las siguientes DOS columnas (la vacía y la de "Fecha")
-                        i += 2;
+                        // Importante: Saltamos la columna 'Fecha' que acabamos de leer
+                        i++;
                     }
                 }
-                // <-- FIN BLOQUE CORREGIDO -->
 
                 return {
                     nomina: nomina,
@@ -276,7 +284,6 @@
     const reportResultDiv = document.getElementById('reportResult');
 
     const searchEmployee = async () => {
-        // ... (sin cambios) ...
         const nomina = nominaInput.value;
         if (!nomina) {
             Swal.fire('Atención', 'Por favor, ingresa un número de nómina.', 'warning');
@@ -301,7 +308,6 @@
     });
 
     function displayEmployeeResult(employee) {
-        // ... (sin cambios) ...
         const estadoClass = employee.estado === 'Deudor' ? 'text-red-400 bg-red-900 bg-opacity-50' : 'text-green-400 bg-green-900 bg-opacity-50';
         const buttonText = employee.estado === 'Deudor' ? 'Descargar Carta de Adeudo' : 'Descargar Carta de No Adeudo';
         reportResultDiv.innerHTML = `
@@ -336,7 +342,6 @@
 
     // --- LÓGICA PARA GENERAR PDF ---
     const loadImage = (src) => new Promise((resolve, reject) => {
-        // ... (sin cambios) ...
         const img = new Image();
         img.crossOrigin = "Anonymous";
         img.onload = () => {
@@ -352,7 +357,6 @@
     });
 
     async function generatePdf(nomina, nombre, estado) {
-        // ... (sin cambios) ...
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
 
@@ -400,6 +404,8 @@
                     totalAmount = body.reduce((acc, row) => acc + parseFloat(row[4].replace('$', '')), 0);
                 }
 
+
+                // --- Contenido de la Carta de Adeudo ---
                 doc.setFontSize(14).setFont(undefined, 'bold');
                 doc.text("Carta De Adeudo De Material y Herramienta", 105, 58, { align: 'center' });
 
